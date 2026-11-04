@@ -13,6 +13,8 @@ import { VARIANT_LABELS } from '../art/palette';
 import { $, h, setText, toggle } from './dom';
 import { tip, ttRow, hideTip } from './overlay';
 import { audio } from '../audio/audio';
+import { DISTRICTS, GEO, GEO_BY_ID } from '../data/politics';
+import { drawWorld, geoAt } from './worldmap';
 
 export interface StoreCtx {
   s: () => GameState;
@@ -30,8 +32,8 @@ const fmtM = (n: number) => money(n, ctx.s().settings.shortNumbers);
 const DOMAIN_NAME = { air: 'Air', ground: 'Ground', sea: 'Sea', space: 'Space' };
 const BRANCH_NAME = Object.fromEntries(BRANCHES.map(b => [b.id, b.name]));
 
-function bought(kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract', asset?: AssetDef): void {
-  emit('purchase', { kind, asset });
+function bought(kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' | 'geo', asset?: AssetDef, id?: string): void {
+  emit('purchase', { kind, asset, id });
   built = '';
 }
 
@@ -59,6 +61,7 @@ function assetTip(a: AssetDef): Node {
     owned ? ttRow('Total', `${fmtM(m.rates[i])}/s (${share.toFixed(1)}%)`) : null,
     ttRow('Livery', VARIANT_LABELS[v]),
     ttRow('Real unit cost', a.realCost),
+    DISTRICTS[a.id] ? ttRow('Built in', DISTRICTS[a.id]) : null,
     a.requires && !s.research.includes(a.requires) ? h('div.tt-sub', { style: 'margin-top:6px;color:#e0524b' }, `Requires R&D: ${RESEARCH_BY_ID[a.requires].name}`) : null,
   );
 }
@@ -263,8 +266,8 @@ const ordersTab: Tab = {
   build() {
     const frag = h('div');
     frag.append(h('div.prestige-box', {},
-      h('h3', {}, 'New Administration'),
-      h('p', {}, 'Hand over to a new administration to convert lifetime spending into Political Capital. Assets, upgrades, research, lobbying and branch levels reset; medals, executive orders and capital remain.'),
+      h('h3', {}, '★ New Administration ★'),
+      h('p', {}, 'Win another election (term limits are under review) and hand over to a new administration to convert lifetime spending into Political Capital. Assets, upgrades, research, lobbying and branch levels reset; medals, executive orders and capital remain.'),
       h('div.prestige-big', { id: 'eo-pending' }, ''),
       h('p', { id: 'eo-info' }, ''),
       h('button.btn.primary', { id: 'eo-go', onclick: () => ctx.confirmPrestige() }, 'Inaugurate New Administration')));
@@ -273,7 +276,7 @@ const ordersTab: Tab = {
       const card = h('div.card', { 'data-id': o.id, style: '--c:#f5d33f' },
         h('h4', {}, o.name), h('div.motto', {}, o.desc),
         h('div.meta', {}, h('span', {}, `Cost: ${fmt(o.cost)} capital`), h('span.st', {}, '')),
-        h('div.row', {}, h('button.btn.small.buy', { onclick: () => { if (E.buyOrder(ctx.s(), o.id)) bought('order'); else audio.play('error'); } }, 'Sign Executive Order')));
+        h('div.row', {}, h('button.btn.small.buy', { onclick: () => { if (E.buyOrder(ctx.s(), o.id)) bought('order', undefined, o.id); else audio.play('error'); } }, 'Sign Executive Order')));
       frag.append(card);
     }
     return frag;
@@ -295,7 +298,69 @@ const ordersTab: Tab = {
   },
 };
 
-Object.assign(tabs, { assets: assetsTab, upgrades: upgradesTab, research: researchTab, contractors: contractorsTab, orders: ordersTab });
+// ---------- World operations ----------
+
+let worldHot: string | null = null;
+
+const worldTab: Tab = {
+  signature() { const s = ctx.s(); return 'geo:' + s.geo.join(',') + ':' + GEO.filter((g, i) => E.isGeoVisible(s, g, i, GEO)).length; },
+  build() {
+    const s = ctx.s();
+    const frag = h('div');
+    const canvas = h('canvas.world-map', { id: 'world-map' }) as HTMLCanvasElement;
+    const visible = GEO.filter((g, i) => E.isGeoVisible(s, g, i, GEO));
+    canvas.addEventListener('mousemove', e => {
+      const g = geoAt(canvas, e.clientX, e.clientY, visible);
+      worldHot = g?.id ?? null;
+      canvas.style.cursor = g ? 'pointer' : 'default';
+      for (const c of document.querySelectorAll<HTMLElement>('#store-body .geo-card')) toggle(c, 'hot', c.dataset.id === worldHot);
+    });
+    canvas.addEventListener('mouseleave', () => { worldHot = null; });
+    canvas.addEventListener('click', e => {
+      const g = geoAt(canvas, e.clientX, e.clientY, visible);
+      if (!g) return;
+      const card = document.querySelector<HTMLElement>(`#store-body .geo-card[data-id="${g.id}"]`);
+      card?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      card?.classList.remove('flash'); void card?.offsetWidth; card?.classList.add('flash');
+    });
+    frag.append(
+      h('div.world-head', {}, h('span', {}, '★ Theatre of Operations ★'), h('span.hint', {}, `${s.geo.length}/${GEO.length} complete`)),
+      h('div.world-frame', {}, canvas),
+      h('p.hint', { style: 'margin:6px 0 8px' }, 'Foreign policy, conducted entirely through procurement. Each operation is a permanent bonus for this administration and is paid for by the taxpayer. Red rings mark open opportunities; flags mark American soil (new).'));
+    for (const g of visible) {
+      const done = s.geo.includes(g.id);
+      const card = h('div.card.geo-card', { 'data-id': g.id, class: done ? 'done' : '' },
+        h('div.geo-top', {}, h('h4', {}, g.name), h('span.geo-place', {}, g.place)),
+        h('div.motto', {}, g.desc),
+        h('div.meta', {}, h('span.geo-fx', {}, g.effect), h('span.st', {}, '')),
+        h('div.row', {}, h('button.btn.small.primary.buy', { onclick: () => {
+          if (E.buyGeo(ctx.s(), g)) { hideTip(); bought('geo', undefined, g.id); } else audio.play('error');
+        } }, '')));
+      card.addEventListener('mouseenter', () => { worldHot = g.id; });
+      card.addEventListener('mouseleave', () => { if (worldHot === g.id) worldHot = null; });
+      frag.append(card);
+    }
+    const next = GEO[visible.length];
+    if (next) frag.append(h('div.card.geo-card.mystery', {}, h('h4', {}, 'Classified Operation'), h('div.motto', {}, `Intelligence will brief you after ${fmtM(next.cost * 0.02)} in lifetime spending.`)));
+    return frag;
+  },
+  update() {
+    const s = ctx.s();
+    const canvas = document.getElementById('world-map') as HTMLCanvasElement | null;
+    if (canvas) drawWorld(canvas, new Set(s.geo), worldHot, performance.now() / 1000);
+    for (const card of document.querySelectorAll<HTMLElement>('#store-body .geo-card[data-id]')) {
+      const g = GEO_BY_ID[card.dataset.id!];
+      const done = s.geo.includes(g.id);
+      const cost = E.geoCost(s, g);
+      const b = card.querySelector<HTMLButtonElement>('.buy')!;
+      b.disabled = done || cost > s.budget;
+      setText(b, done ? 'Mission Accomplished' : `Launch: ${fmtM(cost)}`);
+      setText(card.querySelector('.st')!, done ? '★ Complete' : cost <= s.budget ? 'Affordable' : '');
+    }
+  },
+};
+
+Object.assign(tabs, { world: worldTab, assets: assetsTab, upgrades: upgradesTab, research: researchTab, contractors: contractorsTab, orders: ordersTab });
 
 export function initStore(c: StoreCtx): void {
   ctx = c;
@@ -330,5 +395,7 @@ export function updateStore(): void {
   const rd = RESEARCH.filter(r => E.canResearch(s, r) && E.researchCost(s, r) <= s.budget).length;
   setText($('#badge-research'), rd ? String(rd) : '');
   const p = E.pendingCapital(s);
+  const geo = GEO.filter((g, i) => !s.geo.includes(g.id) && E.isGeoVisible(s, g, i, GEO) && E.geoCost(s, g) <= s.budget).length;
+  setText($('#badge-world'), geo ? String(geo) : '');
   setText($('#badge-orders'), p >= Math.max(1, s.capitalEarned) ? '!' : '');
 }

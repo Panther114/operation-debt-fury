@@ -14,6 +14,7 @@ import { VARIANT_LABELS } from '../art/palette';
 import { $, h, setText } from './dom';
 import { openModal, tip, ttRow, toast } from './overlay';
 import { audio } from '../audio/audio';
+import { BASE_DEBT, DEBT_DRIFT, DISTRICTS, OPPORTUNITY, TAXPAYERS, TAXPAYER_MOODS, taxpayerMood } from '../data/politics';
 
 export interface PanelCtx {
   s: () => GameState;
@@ -30,6 +31,8 @@ const fmtM = (n: number) => money(n, ctx.s().settings.shortNumbers);
 export function initPanels(c: PanelCtx): void {
   ctx = c;
   $('#pallet').append(spriteImg('pallet', 0, 192, 192));
+  $('#brand-eagle').append(spriteImg('eagle', 0, 52, 32));
+  for (const m of TAXPAYER_MOODS) spriteImg(m.sprite, 0, 78, 96);
   const branches = $('#branches');
   for (const b of BRANCHES) {
     const row = h('div.branch', { 'data-id': b.id },
@@ -103,6 +106,32 @@ export function updatePanels(): void {
     (row.querySelector('.bar > i') as HTMLElement).style.width = `${Math.min(100, p * 100)}%`;
     setText(row.querySelector('.branch-lvl')!, `Lv ${lvl}`);
   }
+  // Debt clock and the taxpayer.
+  const perTax = s.lifetime / TAXPAYERS;
+  const debt = BASE_DEBT + s.time * DEBT_DRIFT + s.lifetime;
+  setText($('#debt'), debt < 1e15 ? '$' + Math.floor(debt).toLocaleString('en-US') : money(debt));
+  setText($('#per-taxpayer'), money(perTax));
+  const mood = taxpayerMood(perTax);
+  const art = $('#taxpayer-art');
+  if (art.dataset.sprite !== mood.sprite) {
+    art.dataset.sprite = mood.sprite;
+    art.replaceChildren(spriteImg(mood.sprite, 0, 78, 96));
+    art.classList.remove('sob'); void art.offsetWidth; art.classList.add('sob');
+  }
+  setText($('#taxpayer-mood'), mood.mood);
+  setText($('#taxpayer-note'), mood.note);
+  const idx = TAXPAYER_MOODS.indexOf(mood);
+  const nextAt = TAXPAYER_MOODS[idx + 1]?.at;
+  ($('#taxpayer-bar') as HTMLElement).style.width = nextAt ? `${Math.min(100, (Math.log10(1 + perTax * 100) / Math.log10(1 + nextAt * 100)) * 100)}%` : '100%';
+  const slot = Math.floor(performance.now() / 6000);
+  const opp = $('#opportunity');
+  if (opp.dataset.slot !== String(slot) && s.lifetime > 0) {
+    opp.dataset.slot = String(slot);
+    const affordable = OPPORTUNITY.filter(([, c]) => s.lifetime / c >= 1);
+    const [label, cost] = affordable.length ? affordable[slot % affordable.length] : OPPORTUNITY[0];
+    opp.textContent = `${fmt(Math.floor(s.lifetime / cost))} ${label}`;
+    opp.classList.remove('roll'); void opp.offsetWidth; opp.classList.add('roll');
+  } else if (!s.lifetime) setText(opp, 'nothing yet. Start spending.');
   // Board HUD.
   const total = ASSETS.reduce((t, a) => t + (s.owned[a.id] ?? 0), 0);
   setText($('#hud-units'), total ? `${fmt(total)} assets deployed` : '');
@@ -151,6 +180,7 @@ export function showUnitInfo(a: AssetDef): void {
       ['Share of all spending', m.rate ? `${((m.rates[a.tier] / m.rate) * 100).toFixed(2)}%` : '0%'],
       ['Next unit cost', fmtM(E.assetCost(s, a))],
       ['Real-world unit cost', a.realCost],
+      ['Congressional district', DISTRICTS[a.id] ?? 'Classified'],
     ].map(([k, val]) => h('tr', {}, h('td', {}, k), h('td', {}, val)))));
   openModal(a.name, body);
 }
@@ -190,6 +220,9 @@ function showStats(): void {
     ['Audits (survived / failed)', `${s.stats.audits - s.stats.auditsFailed} / ${s.stats.auditsFailed}`],
     ['Contracts signed', fmt(s.stats.contracts)],
     ['War games', fmt(s.stats.wargames)],
+    ['World operations launched', fmt(s.stats.geoOps)],
+    ['Presidential posts', fmt(s.stats.posts)],
+    ['Bill per taxpayer (lifetime)', money(s.lifetime / TAXPAYERS)],
     ['Time this administration', duration(s.runTime)],
     ['Total play time', duration(s.time)],
   ];

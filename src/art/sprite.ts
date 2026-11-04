@@ -4,8 +4,9 @@ import { SPRITES as AIR1 } from './sprites/air1';
 import { SPRITES as AIR2 } from './sprites/air2';
 import { SPRITES as SURFACE } from './sprites/surface';
 import { SPRITES as SPACE } from './sprites/space';
+import { SPRITES as POLITICS } from './sprites/politics';
 
-export const SPRITES: Record<string, SpriteDef> = { ...AIR1, ...AIR2, ...SURFACE, ...SPACE };
+export const SPRITES: Record<string, SpriteDef> = { ...AIR1, ...AIR2, ...SURFACE, ...SPACE, ...POLITICS };
 
 // The strike group is a formation: a destroyer escorting the carrier.
 const CSG_PARTS = [{ id: 'ddg', dx: 0 }, { id: 'cvn', dx: 50 }];

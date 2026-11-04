@@ -6,11 +6,13 @@ export interface BusEvents {
   achievement: { id: string; name: string; desc: string };
   briefcase: { kind: 'briefcase' | 'toilet' };
   audit: void;
-  purchase: { asset?: AssetDef; kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' };
+  purchase: { asset?: AssetDef; kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' | 'geo'; id?: string };
   buff: void;
   prestige: { gain: number };
   rank: { name: string };
   refresh: void;
+  /** The President publishes a post; `pose` picks the portrait. */
+  post: { text: string; pose?: string; title?: string };
 }
 
 type Handler<T> = (payload: T) => void;

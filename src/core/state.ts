@@ -35,6 +35,9 @@ export interface Stats {
   bestRate: number;
   wargames: number;
   muteToggles: number;
+  posts: number;
+  potusClicks: number;
+  geoOps: number;
 }
 
 export interface GameState {
@@ -56,6 +59,8 @@ export interface GameState {
   upgrades: string[];
   research: string[];
   orders: string[];
+  /** Completed world operations (reset each administration). */
+  geo: string[];
   lobby: Record<string, number>;
   contractReadyAt: Record<string, number>;
   branchXp: Record<BranchId, number>;
@@ -69,12 +74,13 @@ export interface GameState {
   nextBriefcaseAt: number;
   nextAuditAt: number;
   nextWargameAt: number;
+  nextPostAt: number;
 }
 
 export const SAVE_VERSION = 1;
 
 export function newStats(): Stats {
-  return { briefcases: 0, toilets: 0, audits: 0, auditsFailed: 0, contracts: 0, underBudget: 0, tickerClicks: 0, bestRate: 0, wargames: 0, muteToggles: 0 };
+  return { briefcases: 0, toilets: 0, audits: 0, auditsFailed: 0, contracts: 0, underBudget: 0, tickerClicks: 0, bestRate: 0, wargames: 0, muteToggles: 0, posts: 0, potusClicks: 0, geoOps: 0 };
 }
 
 export function newSettings(): Settings {
@@ -97,6 +103,7 @@ export function newState(now = Date.now()): GameState {
     upgrades: [],
     research: [],
     orders: [],
+    geo: [],
     lobby: {},
     contractReadyAt: {},
     branchXp: { army: 0, navy: 0, af: 0, marines: 0, space: 0 },
@@ -110,5 +117,6 @@ export function newState(now = Date.now()): GameState {
     nextBriefcaseAt: 90,
     nextAuditAt: 420,
     nextWargameAt: 300,
+    nextPostAt: 150,
   };
 }

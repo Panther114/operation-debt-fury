@@ -1,6 +1,6 @@
 # Operation Debt Fury
 
-An incremental clicker game about spending US taxpayer money on an ever-larger military. The player starts with $15 of appropriated funds, clicks a pallet of cash to spend it, and procures an escalating force of 40 asset tiers. The force runs from a single Army recruit to a Carrier Strike Group, then on to an orbital carrier, a lunar Marine base and a Dyson-sphere defence contract. All art, music and text are original. The pixel art is defined as code, the music is a procedural chiptune score synthesised with the Web Audio API, and no external images or audio files are used.
+**Spend the Taxpayer's Money.** A satirical incremental clicker game about spending US taxpayer money on an ever-larger military, presented by a pixel-art President with a very large signature. The player starts with $15 of appropriated funds, clicks a pallet of cash to spend it, and procures an escalating force of 40 asset tiers. The force runs from a single Army recruit to a Carrier Strike Group, then on to an orbital carrier, a lunar Marine base and a Dyson-sphere defence contract. All art, music and text are original. The pixel art is defined as code, the music is a procedural chiptune score synthesised with the Web Audio API, and no external images or audio files are used.
 
 ## Running the Game
 
@@ -29,6 +29,11 @@ npm run build
 | Branches and ranks | Branch levels come from branch spending. Twenty-one ranks run from Private to Emperor of the Military-Industrial Complex. |
 | Events | Golden lobbyist briefcases, the $10,000 toilet seat, Congressional audits (a receipt-shredding mini-game) and scheduled war games. |
 | Prestige | New Administration converts lifetime spending into Political Capital (cube-root curve). Capital grants a square-root mandate bonus and buys 15 permanent Executive Orders. |
+| The President | A pixel caricature on the board with seven animated poses. He publishes posts reacting to deployments, briefcases, audits, promotions and executive orders, and comments when clicked. |
+| The Taxpayer | A national debt clock, the bill per taxpayer, a rotating list of what the money could have bought instead, and a taxpayer whose mood declines from Blissfully Unaware to Wearing a Barrel. |
+| World operations | A pixel world map with 16 geopolitical operations, from renaming the Gulf to purchasing Greenland and planting a flag on Mars. Completed operations repaint territory in stars and stripes and grant bonuses for the administration. |
+| Presidential events | Tariff tantrums, 3 a.m. all-caps posts, Super Bowl flyovers and other timed boosts. |
+| Districts | Each asset lists the congressional district that builds it. |
 | Medals | 110 achievements, each adding +1% morale. Secret medals are included. |
 | Audio | Four original tracks (Appropriations March, War Room Briefing, Emergency Supplemental, New Administration Fanfare). Layers are added as spending rises, and around 20 sound effects are synthesised. |
 
@@ -51,11 +56,11 @@ With the current curve, the simulated player reaches the first New Administratio
 
 ```
 src/core     state, economy, events, save, number formatting, event bus
-src/data     assets, upgrades, research, contractors, ranks, orders, medals, headlines
-src/art      palette, sprite rasteriser, procedural insignia and ribbons, sprite maps
+src/data     assets, upgrades, research, contractors, ranks, orders, medals, headlines, politics
+src/art      palette, sprite rasteriser, pixel-grid composer, procedural insignia and ribbons, sprite maps
 src/board    animated canvas board and combat effects
 src/audio    Web Audio synthesiser, sequencer and tracks
-src/ui       DOM panels, store, overlays, cinematics, styles
+src/ui       DOM panels, store, world map, President, splash, overlays, cinematics, styles
 ```
 
 Saves are stored in the browser's localStorage and can be exported or imported as a text code from Settings.

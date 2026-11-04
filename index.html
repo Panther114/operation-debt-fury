@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="Operation Debt Fury: an incremental game about spending taxpayer money on an entire military." />
-  <meta name="theme-color" content="#14181d" />
+  <meta name="description" content="Operation Debt Fury: Spend the Taxpayer's Money. A satirical incremental game about the American defense budget." />
+  <meta name="theme-color" content="#0f1a3a" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%2314181d'/%3E%3Crect x='2' y='4' width='12' height='8' fill='%235fae4e'/%3E%3Crect x='3' y='5' width='10' height='6' fill='%232f6e2f'/%3E%3Crect x='7' y='5' width='2' height='6' fill='%23f2f4f5'/%3E%3C/svg%3E" />
   <title>Operation Debt Fury</title>
 </head>
@@ -12,14 +12,14 @@
   <div id="app">
     <header id="topbar">
       <div class="brand">
-        <span class="brand-mark">$</span>
+        <span class="brand-mark" id="brand-eagle"></span>
         <div>
           <div class="brand-title">OPERATION DEBT FURY</div>
-          <div class="brand-sub">Department of Unlimited Appropriations</div>
+          <div class="brand-sub">&#9733; Spend the Taxpayer's Money &#9733; Department of War</div>
         </div>
       </div>
       <button id="rank" class="rank" title="Rank"></button>
-      <div id="ticker" class="ticker" title="Defense News Network"><span class="ticker-tag">DNN</span><div class="ticker-track"><span id="ticker-text"></span></div></div>
+      <div id="ticker" class="ticker" title="Defense News Network"><span class="ticker-tag">&#9733; BREAKING</span><div class="ticker-track"><span id="ticker-text"></span></div></div>
       <nav class="top-actions">
         <button data-modal="medals" class="icon-btn" title="Medals and achievements">Medals</button>
         <button data-modal="stats" class="icon-btn" title="Statistics">Stats</button>
@@ -28,19 +28,37 @@
       </nav>
     </header>
 
+    <div id="debtbar">
+      <div class="debt-cell debt-main"><span class="debt-label">U.S. National Debt</span><b id="debt">$0</b></div>
+      <div class="debt-cell"><span class="debt-label">Your Bill per Taxpayer</span><b id="per-taxpayer">$0</b></div>
+      <div class="debt-cell"><span class="debt-label">Taxpayers Consulted</span><b>0</b></div>
+      <div class="debt-cell debt-opp"><span class="debt-label">Instead, the money could have bought</span><b id="opportunity"></b></div>
+    </div>
+
     <main id="game">
       <section id="left" class="panel col" data-tab="pallet">
         <div class="ledger">
-          <div class="ledger-label">Appropriated Funds</div>
+          <div class="ledger-label">Taxpayer Money Left to Spend</div>
           <div id="budget" class="ledger-big">$0</div>
-          <div class="ledger-row"><span>Spending rate</span><b id="rate">$0/s</b></div>
-          <div class="ledger-row"><span>Spent this administration</span><b id="spent">$0</b></div>
+          <div class="ledger-row"><span>Burn rate</span><b id="rate">$0/s</b></div>
+          <div class="ledger-row"><span>Spent this term</span><b id="spent">$0</b></div>
           <div class="ledger-row"><span>Per click</span><b id="clickpow">$1</b></div>
         </div>
         <div class="pallet-wrap">
           <div id="combo"></div>
           <button id="pallet" class="pallet" aria-label="Spend money"></button>
-          <div class="pallet-caption">Click to spend taxpayer money</div>
+          <div class="pallet-caption">&#9733; Click to spend the taxpayer's money &#9733;</div>
+        </div>
+        <div class="taxpayer-card">
+          <div class="section-title">The American Taxpayer</div>
+          <div class="taxpayer-row">
+            <div id="taxpayer-art" class="taxpayer-art"></div>
+            <div>
+              <div id="taxpayer-mood" class="taxpayer-mood"></div>
+              <div id="taxpayer-note" class="taxpayer-note"></div>
+              <div class="taxpayer-bar"><i id="taxpayer-bar"></i></div>
+            </div>
+          </div>
         </div>
         <div id="buffs" class="buffs"></div>
         <div class="branches">
@@ -52,6 +70,11 @@
       <section id="center" class="col" data-tab="board">
         <div class="board-frame">
           <canvas id="board"></canvas>
+          <div id="potus" class="potus">
+            <div id="potus-bubble" class="potus-bubble"><div class="pb-head"><span class="pb-name">The President</span><span class="pb-handle">@POTUS &#183; just now</span></div><div id="potus-text" class="pb-text"></div></div>
+            <button id="potus-btn" class="potus-btn" aria-label="The President"></button>
+            <div class="potus-plate">Commander-in-Chief</div>
+          </div>
           <div class="board-hud">
             <div id="hud-units" class="hud-chip"></div>
             <div id="hud-capital" class="hud-chip"></div>
@@ -64,8 +87,9 @@
           <button data-tab="assets" class="tab active">Assets</button>
           <button data-tab="upgrades" class="tab">Upgrades<span class="badge" id="badge-upgrades"></span></button>
           <button data-tab="research" class="tab">R&amp;D<span class="badge" id="badge-research"></span></button>
-          <button data-tab="contractors" class="tab">Contractors</button>
-          <button data-tab="orders" class="tab">Administration<span class="badge" id="badge-orders"></span></button>
+          <button data-tab="world" class="tab">World<span class="badge" id="badge-world"></span></button>
+          <button data-tab="contractors" class="tab">Lobby</button>
+          <button data-tab="orders" class="tab">Oval Office<span class="badge" id="badge-orders"></span></button>
         </div>
         <div id="store-body" class="store-body"></div>
       </section>
@@ -82,6 +106,7 @@
   <div id="tooltip" role="tooltip"></div>
   <div id="modal-root"></div>
   <div id="fx-layer"></div>
+  <div id="splash"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

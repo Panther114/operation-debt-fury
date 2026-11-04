@@ -6,6 +6,9 @@ import { emit } from './bus';
 import { invalidate, mods, recordSpend } from './economy';
 import { money } from './format';
 import type { Buff, GameState } from './state';
+import { EVENT_POSTS, POST_EVENTS } from '../data/politics';
+
+const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -29,10 +32,12 @@ export function openBriefcase(s: GameState, kind: 'briefcase' | 'toilet'): void 
     const amt = Math.max(1e4, m.rate * 120);
     s.stats.toilets++;
     recordSpend(s, amt);
+    emit('post', { text: pick(EVENT_POSTS.toilet), pose: 'thumbs' });
     emit('toast', { title: '$10,000 Toilet Seat Acquired', body: `Procured one (1) gold-plated toilet seat for ${money(amt)}. Morale is through the roof.`, icon: 'toilet', tone: 'gold' });
     return;
   }
   s.stats.briefcases++;
+  emit('post', { text: pick(EVENT_POSTS.briefcase), pose: 'thumbs' });
   const r = Math.random();
   if (r < 0.42) {
     addBuff(s, { id: 'supplemental', label: 'Emergency Supplemental', rate: 7, duration: 77, good: true });
@@ -60,10 +65,12 @@ export function resolveAudit(s: GameState, success: boolean): void {
   s.stats.audits++;
   if (success || mods(s).auditImmune) {
     addBuff(s, { id: 'audit', label: 'Audit Inconclusive', rate: 2, duration: 60, good: true });
+    emit('post', { text: pick(EVENT_POSTS.auditWin), pose: 'thumbs' });
     emit('toast', { title: 'Audit Inconclusive', body: 'The auditors could not locate a single receipt. Spending ×2 for 60 seconds in celebration.', icon: 'audit', tone: 'good' });
   } else {
     s.stats.auditsFailed++;
     addBuff(s, { id: 'audit', label: 'Findings Published', rate: 0.5, duration: 30, good: false });
+    emit('post', { text: pick(EVENT_POSTS.auditLose), pose: 'shout' });
     emit('toast', { title: 'Audit Failed (Again)', body: 'The Pentagon has failed its audit for another consecutive year. Spending ×0.5 for 30 seconds while everyone pretends to care.', icon: 'audit', tone: 'bad' });
   }
 }
@@ -127,6 +134,16 @@ export function signContract(s: GameState, c: ContractorDef): void {
   emit('toast', { title: `Contract Signed: ${c.name}`, body, icon: 'capitol', tone: 'good' });
 }
 
+// ---------- Presidential posts ----------
+
+export function presidentialEvent(s: GameState): void {
+  const e = pick(POST_EVENTS);
+  s.stats.posts++;
+  addBuff(s, { id: e.id, label: e.title, rate: e.buff.rate, click: e.buff.click, cost: e.buff.cost, domain: e.buff.domain, duration: e.buff.duration, good: true });
+  emit('post', { text: e.post, pose: e.buff.click ? 'shout' : 'point', title: e.title });
+  emit('toast', { title: `Presidential Post: ${e.title}`, body: e.body, icon: 'potus_talk', tone: 'gold' });
+}
+
 // ---------- Scheduler and achievements ----------
 
 let achieveTimer = 0;
@@ -144,6 +161,10 @@ export function updateEvents(s: GameState, dt: number): void {
   if (s.time >= s.nextWargameAt) {
     s.nextWargameAt = s.time + rand(280, 460);
     startWargame(s);
+  }
+  if (s.time >= s.nextPostAt) {
+    s.nextPostAt = s.time + rand(150, 270) / mods(s).eventFreq;
+    if (s.lifetime > 500) presidentialEvent(s);
   }
   achieveTimer += dt;
   if (achieveTimer >= 0.5) {

@@ -77,13 +77,17 @@ export function titleCard(kicker: string, title: string, sub: string, icon?: HTM
  * Plays the New Administration cinematic. `reset` is invoked at the darkest moment so the
  * board is already empty when the curtain rises.
  */
-export function inauguration(outgoingSpent: string, gain: string, reset: () => void, onBeat: (beat: 'drum' | 'boom' | 'fanfare') => void): void {
+export function inauguration(outgoingSpent: string, gain: string, term: number, reset: () => void, onBeat: (beat: 'drum' | 'boom' | 'fanfare') => void): void {
   const fireworks = h('div.fw-layer');
+  const ord = (n: number) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] ?? 'th');
   const stage = h('div.inaug', {},
+    h('div.inaug-stripes'),
     h('div.inaug-line.l1', {}, 'THE OUTGOING ADMINISTRATION SPENT'),
     h('div.inaug-num', {}, outgoingSpent),
-    h('div.inaug-capitol', {}, spriteImg('capitol', 0, 240, 200)),
-    h('div.inaug-line.l2', {}, 'A NEW ADMINISTRATION IS INAUGURATED'),
+    h('div.inaug-capitol', {}, spriteImg('capitol', 0, 240, 200),
+      h('div.inaug-potus', {}, spriteImg('potus_point', 0, 176, 176), spriteImg('podium', 0, 176, 120))),
+    h('div.inaug-line.l2', {}, `THE ${ord(term).toUpperCase()} TERM BEGINS`),
+    h('div.inaug-sub', {}, 'Constitutional scholars have been asked to look the other way.'),
     h('div.inaug-gain', {}, `+${gain} POLITICAL CAPITAL`),
     fireworks);
   document.body.append(stage);

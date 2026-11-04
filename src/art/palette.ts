@@ -28,6 +28,21 @@ export const FIXED: Record<string, string> = {
   '&': '#b8e0a0', // light money green
   p: '#8a5cc8', // purple (sci-fi energy)
   P: '#4e2f80', // dark purple
+  h: '#f7da86', // hair, light
+  H: '#e0b052', // hair, mid
+  j: '#a97a2c', // hair, dark
+  u: '#f2a466', // tanned skin
+  U: '#d07c44', // tanned skin shade
+  v: '#97532d', // deep skin shade
+  i: '#f9cf9f', // pale skin (goggle tan)
+  q: '#c4584a', // lips
+  x: '#9a6634', // wood
+  X: '#5e3a19', // dark wood
+  z: '#b8202c', // flag red
+  Z: '#1f2f6e', // flag blue
+  W: '#ffffff', // pure white
+  A: '#3a2a1a', // eagle brown
+  B: '#24170c', // eagle dark brown
 };
 
 export type Trio = [body: string, shade: string, highlight: string];

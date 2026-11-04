@@ -1,3 +1,4 @@
+import { GEO_BY_ID, type GeoOp } from '../data/politics';
 import { ASSETS, ASSET_BY_ID, type AssetDef } from '../data/assets';
 import { UPGRADE_BY_ID, type Effect, type Unlock, type UpgradeDef, UPGRADES } from '../data/upgrades';
 import { RESEARCH_BY_ID, type ResearchDef } from '../data/research';
@@ -53,6 +54,7 @@ function activeEffects(s: GameState): Effect[] {
   for (const id of s.upgrades) out.push(...(UPGRADE_BY_ID[id]?.effects ?? []));
   for (const id of s.research) out.push(...(RESEARCH_BY_ID[id]?.effects ?? []));
   for (const id of s.orders) out.push(...(ORDER_BY_ID[id]?.effects ?? []));
+  for (const id of s.geo) out.push(...(GEO_BY_ID[id]?.effects ?? []));
   return out;
 }
 
@@ -304,6 +306,7 @@ export function prestige(s: GameState): number {
   s.owned = {};
   s.upgrades = [];
   s.research = [];
+  s.geo = [];
   s.lobby = {};
   s.contractReadyAt = {};
   s.branchXp = { army: 0, navy: 0, af: 0, marines: 0, space: 0 };
@@ -321,6 +324,27 @@ export function buyOrder(s: GameState, id: string): boolean {
   if (!o || s.orders.includes(id) || s.capital < o.cost) return false;
   s.capital -= o.cost;
   s.orders.push(id);
+  invalidate();
+  return true;
+}
+
+// ---------- World operations ----------
+
+export function isGeoVisible(s: GameState, g: GeoOp, index: number, all: GeoOp[]): boolean {
+  return s.geo.includes(g.id) || index === 0 || s.lifetime >= g.cost * 0.02 || s.geo.includes(all[index - 1].id);
+}
+
+export function geoCost(s: GameState, g: GeoOp): number {
+  return g.cost * mods(s).costMult;
+}
+
+export function buyGeo(s: GameState, g: GeoOp): boolean {
+  const cost = geoCost(s, g);
+  if (s.geo.includes(g.id) || cost > s.budget) return false;
+  s.budget -= cost;
+  recordSpend(s, cost);
+  s.geo.push(g.id);
+  s.stats.geoOps++;
   invalidate();
   return true;
 }

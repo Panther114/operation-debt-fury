@@ -1,4 +1,5 @@
 import './ui/styles.css';
+import './ui/americana.css';
 import { ASSETS } from './data/assets';
 import { newState, type GameState } from './core/state';
 import { loadLocal, saveLocal, wipeLocal } from './core/save';
@@ -15,7 +16,12 @@ import { initStore, invalidateStore, updateStore } from './ui/store';
 import { initPanels, jukebox, showUnitInfo, updatePanels } from './ui/panels';
 import { comboClick, inauguration, setReducedMotion, shake, shockwave, titleCard, updateCinema, updateCombo } from './ui/cinema';
 import { insigniaURL } from './art/insignia';
-import { RANKS, rankIndex } from './data/meta';
+import { ORDERS, RANKS, rankIndex } from './data/meta';
+import { DEPLOY_POSTS, EVENT_POSTS, GEO_BY_ID } from './data/politics';
+import { initPresident, randomPost, say, updatePresident } from './ui/president';
+import { showSplash } from './ui/splash';
+
+const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
 
 let state: GameState = loadLocal() ?? newState();
 const S = () => state;
@@ -49,23 +55,34 @@ initPanels({
 
 initStore({ s: S, confirmPrestige });
 
+// ---------- The President ----------
+
+initPresident(() => {
+  audio.start();
+  state.stats.potusClicks++;
+  audio.play('tick');
+  say(randomPost(), pick(['talk', 'point', 'thumbs', 'shout']));
+});
+on('post', p => { state.stats.posts++; say(p.text, p.pose ?? 'talk'); });
+
 function confirmPrestige(): void {
   const gain = E.pendingCapital(state);
   if (gain < 1) return;
   const close = openModal('Inaugurate New Administration', h('div', {},
+    h('div', { style: 'display:grid;place-items:center;margin-bottom:8px' }, spriteImg('potus_point', 0, 132, 132)),
     h('p', {}, `The outgoing administration leaves office with ${money(state.lifetime)} spent in total. The incoming administration receives `, h('b', { style: 'color:#f5d33f' }, `${fmt(gain)} Political Capital`), '.'),
     h('p', {}, 'All assets, upgrades, research, lobbying and branch levels will be reset. Medals, executive orders and political capital remain. The mandate bonus will rise to ',
       h('b', {}, `×${E.mandate(state.capitalEarned + gain).toFixed(2)}`), '.'),
     h('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:12px' },
-      h('button.btn', { onclick: () => close() }, 'Remain in office'),
-      h('button.btn.primary', { onclick: () => { close(); doPrestige(); } }, 'Take the oath'))));
+      h('button.btn', { onclick: () => close() }, 'Remain in office (for now)'),
+      h('button.btn.primary', { onclick: () => { close(); doPrestige(); } }, 'Take the oath (again)'))));
 }
 
 function doPrestige(): void {
   const outgoing = money(state.lifetime);
   const gain = E.pendingCapital(state);
   fanfareUntil = performance.now() + 12000;
-  inauguration(outgoing, fmt(gain), () => {
+  inauguration(outgoing, fmt(gain), state.prestiges + 2, () => {
     E.prestige(state);
     deployed.clear();
     scheduleBriefcase(state);
@@ -78,6 +95,7 @@ function doPrestige(): void {
     else if (beat === 'boom') audio.play('explosion');
     else { audio.play('prestige'); flash(); }
   });
+  setTimeout(() => say(pick(EVENT_POSTS.prestige), 'point'), 7400);
   setTimeout(() => toast('New Administration Inaugurated', `+${fmt(gain)} Political Capital. Spend it on Executive Orders in the Administration tab.`, 'capitol', 'gold', 9000), 7000);
 }
 
@@ -147,6 +165,7 @@ on('audit', () => {
   if (modalOpen() || auditActive) { state.nextAuditAt = state.time + 60; return; }
   auditActive = true;
   audio.play('audit');
+  say(pick(EVENT_POSTS.auditStart), 'shout');
   const need = 10, time = 9;
   let shredded = 0, left = time, finished = false;
   const field = h('div.audit-field');
@@ -194,6 +213,7 @@ on('rank', r => {
   const img = new Image();
   img.src = insigniaURL(RANKS[rankIndex(state.lifetime)].insignia);
   titleCard('PROMOTION', r.name.toUpperCase(), 'By order of the Committee on Appropriations', img);
+  say(pick(EVENT_POSTS.rank), 'thumbs', false);
   shake(0.3);
   audio.play('rank');
 });
@@ -207,6 +227,21 @@ on('purchase', p => {
     audio.play('deploy');
     shake(0.25 + p.asset.tier / 80);
     setTimeout(() => { board.shake(0.5); }, 400);
+    say(pick(DEPLOY_POSTS).replaceAll('{name}', p.asset.short), p.asset.tier % 2 ? 'thumbs' : 'point', p.asset.tier >= 3);
+  }
+  if (p.kind === 'geo' && p.id) {
+    const g = GEO_BY_ID[p.id];
+    titleCard('★ OPERATION LAUNCHED ★', g.name.toUpperCase(), `${g.place} · ${g.effect}`, 'flag', 3000);
+    say(g.post, 'point');
+    flash();
+    shake(0.5);
+    audio.play('deploy');
+    board.burst(0.5, 12);
+  }
+  if (p.kind === 'order' && p.id) {
+    const o = ORDERS.find(x => x.id === p.id);
+    titleCard('EXECUTIVE ORDER SIGNED', (o?.name ?? '').toUpperCase(), 'Signed with a very large marker. Effective immediately. Legality pending.', spriteImg('potus_sign', 0, 132, 132), 3000);
+    say(pick(EVENT_POSTS.order), 'thumbs');
   }
   const sfx = p.kind === 'research' ? 'research' : p.kind === 'upgrade' || p.kind === 'order' ? 'upgrade' : 'buy';
   audio.play(sfx);
@@ -292,6 +327,7 @@ function step(now: number): void {
   if (board.takeBoom()) audio.play('boomFar');
   updateCinema(dt);
   updateCombo(dt);
+  updatePresident();
   document.body.classList.toggle('frenzy', state.buffs.some(b => b.good && ((b.rate ?? 1) >= 7 || (b.click ?? 1) >= 50)));
   document.body.classList.toggle('alarm', auditActive);
   uiTimer += dt;
@@ -315,9 +351,16 @@ requestAnimationFrame(frame);
 window.addEventListener('beforeunload', () => saveLocal(state));
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveLocal(state); });
 
-if (!state.clicks && !state.prestiges) {
-  setTimeout(() => toast('Orders from the Pentagon', 'Congress has appropriated $15. Click the pallet of cash to spend it, then buy your first Recruit. Spend as much as humanly possible.', 'pallet', 'gold', 12000), 600);
-}
+showSplash(!state.clicks && !state.prestiges, () => {
+  audio.start();
+  audio.play('prestige');
+  if (!state.clicks && !state.prestiges) {
+    say('My fellow Americans. Congress gave us $15 of YOUR money. Click the cash. Spend it ALL. Then buy a recruit. Then buy EVERYTHING.', 'point');
+    setTimeout(() => toast('Orders from the Oval Office', 'Click the pallet of taxpayer cash to spend it, then buy your first Recruit. Every dollar spent is refunded by Congress and spent again.', 'pallet', 'gold', 12000), 400);
+  } else {
+    say(`Welcome back. You have spent ${money(state.lifetime)} of taxpayer money. Not enough. NEVER enough.`, 'thumbs');
+  }
+});
 
 // Debug hook for automated checks in development builds.
 if (import.meta.env.DEV) (window as unknown as { odf: unknown }).odf = { S, E, ASSETS, board };
