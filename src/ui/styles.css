@@ -33,6 +33,21 @@ body { background: radial-gradient(1200px 600px at 50% -10%, #1b2530 0%, var(--b
 button { font: inherit; color: inherit; cursor: pointer; }
 img.sprite, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 
+/* ---------- Scrollbars ---------- */
+/* Pixel-style scrollbars for every scrollable element. WebKit/Blink use the pseudo-elements;
+   the standard properties are applied only where those are unsupported (Firefox), because
+   Blink ignores the pseudo-elements once scrollbar-color or scrollbar-width is set. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0b0e11; box-shadow: inset 1px 0 0 var(--line); }
+::-webkit-scrollbar-thumb { background: var(--line-2); border: 2px solid #0b0e11; border-radius: 0; box-shadow: inset 0 0 0 1px #4d5d6e; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold-d); box-shadow: inset 0 0 0 1px var(--gold); }
+::-webkit-scrollbar-thumb:active { background: var(--gold); }
+::-webkit-scrollbar-corner { background: #0b0e11; }
+::-webkit-scrollbar-button { display: none; }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-color: var(--line-2) #0b0e11; scrollbar-width: thin; }
+}
+
 #app { display: grid; grid-template-rows: auto auto 1fr; height: 100dvh; }
 
 /* ---------- Top bar ---------- */
@@ -263,7 +278,9 @@ textarea.save { width: 100%; height: 90px; background: #0b0e11; color: var(--mon
   #mobile-tabs button { flex: 1; padding: 12px; background: none; border: none; font-family: var(--pixel); font-size: 12px; color: var(--muted); }
   #mobile-tabs button.active { color: var(--gold); box-shadow: inset 0 2px 0 var(--gold); }
   .tree { grid-template-columns: repeat(5, minmax(64px, 1fr)); overflow-x: auto; }
-  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .tabs { overflow-x: auto; }
+  .tabs::-webkit-scrollbar { height: 4px; }
+  .tabs::-webkit-scrollbar-thumb { border-width: 0; box-shadow: none; }
   .tab { flex: none; padding: 10px 9px; }
   .form-row { grid-template-columns: 1fr; }
 }

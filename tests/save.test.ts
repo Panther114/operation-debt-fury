@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { newState } from '../src/core/state';
-import { decode, encode, migrate } from '../src/core/save';
+import { BACKUP_KEY, CORRUPT_KEY, decode, encode, loadLocal, migrate, SAVE_KEY, saveLocal } from '../src/core/save';
 
 describe('save', () => {
   it('round-trips through the export string', () => {
@@ -18,5 +18,26 @@ describe('save', () => {
   it('rejects garbage', () => {
     expect(() => decode('not a save')).toThrow();
     expect(() => migrate({} as never)).toThrow();
+  });
+});
+
+describe('local storage', () => {
+  const store = new Map<string, string>();
+  beforeEach(() => {
+    store.clear();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v); },
+      removeItem: (k: string) => { store.delete(k); },
+    };
+  });
+  it('falls back to the last good backup when the main slot is corrupt', () => {
+    const s = newState(1); s.budget = 777;
+    saveLocal(s);
+    expect(loadLocal()?.budget).toBe(777);
+    store.set(SAVE_KEY, 'ODF1.@@corrupt@@');
+    expect(loadLocal()?.budget).toBe(777);
+    expect(store.get(CORRUPT_KEY)).toBe('ODF1.@@corrupt@@');
+    expect(store.has(BACKUP_KEY)).toBe(true);
   });
 });

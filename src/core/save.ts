@@ -33,20 +33,49 @@ export function migrate(raw: Partial<GameState>): GameState {
   return s;
 }
 
-export function saveLocal(s: GameState): void {
+/** Copy of the last save that decoded successfully, used if the main slot is ever unreadable. */
+export const BACKUP_KEY = SAVE_KEY + '-backup';
+/** Raw contents of a main slot that failed to decode, kept so it is never silently overwritten. */
+export const CORRUPT_KEY = SAVE_KEY + '-corrupt';
+
+/** Writes the save. Returns false if storage is unavailable or full. */
+export function saveLocal(s: GameState): boolean {
   s.lastSaved = Date.now();
-  try { localStorage.setItem(SAVE_KEY, encode(s)); } catch { /* storage unavailable */ }
+  try {
+    localStorage.setItem(SAVE_KEY, encode(s));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
+/**
+ * Loads the save. If the main slot cannot be decoded, its raw contents are preserved under
+ * CORRUPT_KEY and the last known-good backup is used instead. A successful load refreshes the backup.
+ */
 export function loadLocal(): GameState | null {
+  let main: string | null = null;
+  try { main = localStorage.getItem(SAVE_KEY); } catch { return null; }
+  if (main) {
+    try {
+      const s = decode(main);
+      try { localStorage.setItem(BACKUP_KEY, main); } catch { /* storage full */ }
+      return s;
+    } catch {
+      try { localStorage.setItem(CORRUPT_KEY, main); } catch { /* storage full */ }
+    }
+  }
   try {
-    const str = localStorage.getItem(SAVE_KEY);
-    return str ? decode(str) : null;
+    const backup = localStorage.getItem(BACKUP_KEY);
+    return backup ? decode(backup) : null;
   } catch {
     return null;
   }
 }
 
 export function wipeLocal(): void {
-  try { localStorage.removeItem(SAVE_KEY); } catch { /* storage unavailable */ }
+  try {
+    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(BACKUP_KEY);
+  } catch { /* storage unavailable */ }
 }

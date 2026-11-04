@@ -2,7 +2,7 @@ import './ui/styles.css';
 import './ui/americana.css';
 import { ASSETS } from './data/assets';
 import { newState, type GameState } from './core/state';
-import { loadLocal, saveLocal, wipeLocal } from './core/save';
+import { loadLocal, saveLocal, SAVE_KEY, wipeLocal } from './core/save';
 import * as E from './core/economy';
 import { on } from './core/bus';
 import { checkAchievements, openBriefcase, resolveAudit, scheduleBriefcase, updateEvents } from './core/events';
@@ -25,6 +25,25 @@ const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)]
 
 let state: GameState = loadLocal() ?? newState();
 const S = () => state;
+
+// ---------- Persistence ----------
+
+/** Seconds between autosaves. Significant actions also trigger a save on the next simulation step. */
+const SAVE_EVERY = 5;
+/**
+ * Set when another tab has written the save. This tab then stops saving entirely, so that its
+ * older state can never overwrite the newer progress made in the other tab.
+ */
+let dormant = false;
+let saveTimer = 0;
+
+function persist(): void {
+  if (!dormant) saveLocal(state);
+}
+/** Schedules a save on the next simulation step (coalesces bursts of purchases into one write). */
+function requestSave(): void {
+  saveTimer = SAVE_EVERY;
+}
 E.invalidate();
 
 // ---------- Board ----------
@@ -49,8 +68,8 @@ function applySettings(): void {
 initPanels({
   s: S,
   applySettings,
-  replaceState: next => { state = next; E.invalidate(); board.sync(); invalidateStore(); applySettings(); saveLocal(state); closeModal(); },
-  wipe: () => { wipeLocal(); state = newState(); E.invalidate(); board.sync(); invalidateStore(); closeModal(); applySettings(); },
+  replaceState: next => { state = next; E.invalidate(); board.sync(); invalidateStore(); applySettings(); persist(); closeModal(); },
+  wipe: () => { wipeLocal(); state = newState(); E.invalidate(); board.sync(); invalidateStore(); closeModal(); applySettings(); persist(); },
 });
 
 initStore({ s: S, confirmPrestige });
@@ -89,7 +108,7 @@ function doPrestige(): void {
     board.clearFx();
     board.sync();
     invalidateStore();
-    saveLocal(state);
+    persist();
   }, beat => {
     if (beat === 'drum') audio.play('drumroll');
     else if (beat === 'boom') audio.play('explosion');
@@ -208,7 +227,7 @@ on('audit', () => {
 // ---------- Bus reactions ----------
 
 on('toast', t => toast(t.title, t.body, t.icon, t.tone));
-on('achievement', a => { toast(`Medal Awarded: ${a.name}`, a.desc, 'emb_army', 'gold'); audio.play('achievement'); });
+on('achievement', a => { requestSave(); toast(`Medal Awarded: ${a.name}`, a.desc, 'emb_army', 'gold'); audio.play('achievement'); });
 on('rank', r => {
   const img = new Image();
   img.src = insigniaURL(RANKS[rankIndex(state.lifetime)].insignia);
@@ -219,6 +238,7 @@ on('rank', r => {
 });
 on('buff', () => invalidateStore());
 on('purchase', p => {
+  requestSave();
   const firstOfType = p.kind === 'asset' && p.asset && !deployed.has(p.asset.id);
   board.sync();
   if (firstOfType && p.asset) {
@@ -298,7 +318,6 @@ const STEP = 1 / 20;
 let acc = 0;
 let last = performance.now();
 let uiTimer = 0;
-let saveTimer = 0;
 
 function frame(now: number): void {
   step(now);
@@ -309,6 +328,7 @@ function frame(now: number): void {
 setInterval(() => { if (performance.now() - last > 400) step(performance.now()); }, 500);
 
 function step(now: number): void {
+  if (dormant) return;
   // Clamp very long gaps (background tabs) so the simulation catches up in bounded chunks.
   const dt = Math.min(60, (now - last) / 1000);
   last = now;
@@ -340,7 +360,7 @@ function step(now: number): void {
     document.title = `${money(state.budget, true)} · Operation Debt Fury`;
   }
   saveTimer += dt;
-  if (saveTimer >= 30) { saveTimer = 0; saveLocal(state); }
+  if (saveTimer >= SAVE_EVERY) { saveTimer = 0; persist(); }
 }
 
 applySettings();
@@ -348,8 +368,25 @@ updatePanels();
 updateStore();
 requestAnimationFrame(frame);
 
-window.addEventListener('beforeunload', () => saveLocal(state));
-document.addEventListener('visibilitychange', () => { if (document.hidden) saveLocal(state); });
+// Save whenever the page may be about to disappear. 'pagehide' is the event mobile browsers fire
+// reliably; 'beforeunload' and 'visibilitychange' cover desktop tab closes and tab switches.
+window.addEventListener('pagehide', persist);
+window.addEventListener('beforeunload', persist);
+document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
+
+// The 'storage' event fires only in tabs other than the writer: another tab now owns the save.
+window.addEventListener('storage', e => {
+  if (dormant || (e.key !== SAVE_KEY && e.key !== null)) return;
+  dormant = true;
+  audio.setVolume(0, 0, true);
+  openModal('Game Open in Another Tab', h('div', {},
+    h('p', {}, 'Progress is being saved by another tab. This tab has been paused so that it cannot overwrite that progress.'),
+    h('div', { style: 'display:flex;justify-content:flex-end;margin-top:12px' },
+      h('button.btn.primary', { onclick: () => location.reload() }, 'Load latest progress'))), undefined, false);
+});
+
+// Claim the save for this tab immediately, so any older tab still open stops saving.
+persist();
 
 showSplash(!state.clicks && !state.prestiges, () => {
   audio.start();
