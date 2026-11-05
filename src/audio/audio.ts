@@ -11,7 +11,8 @@ export function freq(note: string): number {
   return 440 * 2 ** ((midi - 69) / 12);
 }
 
-export type Sfx = 'click' | 'buy' | 'upgrade' | 'research' | 'golden' | 'goldenOpen' | 'achievement' | 'audit' | 'error' | 'jet' | 'boom' | 'horn' | 'prestige' | 'rank' | 'tick' | 'explosion' | 'boomFar' | 'deploy' | 'drumroll' | 'combo';
+export type Sfx = 'click' | 'buy' | 'upgrade' | 'research' | 'golden' | 'goldenOpen' | 'achievement' | 'audit' | 'error' | 'jet' | 'boom' | 'horn' | 'prestige' | 'rank' | 'tick' | 'explosion' | 'boomFar' | 'deploy' | 'drumroll' | 'combo'
+  | 'blip' | 'blipLow' | 'whoosh' | 'heart' | 'riser' | 'impact' | 'shimmer' | 'sting' | 'alarm' | 'thud';
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -69,8 +70,17 @@ class AudioEngine {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.vol.muted ? 0 : 0.8, t, 0.05);
-    this.music.gain.setTargetAtTime(this.vol.music * 0.55, t, 0.05);
+    this.music.gain.setTargetAtTime(this.ducked ? 0 : this.vol.music * 0.55, t, 0.05);
     this.sfx.gain.setTargetAtTime(this.vol.sfx * 0.6, t, 0.02);
+  }
+
+  private ducked = false;
+  /** Fades the music out (true) or back in (false), e.g. for cinematics. */
+  duck(on: boolean): void {
+    this.ducked = on;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.music.gain.setTargetAtTime(on ? 0 : this.vol.music * 0.55, t, on ? 0.15 : 0.4);
   }
 
   /** Requests a track; it switches at the next bar line. */
@@ -217,6 +227,31 @@ class AudioEngine {
         break;
       case 'combo': seq(['E5', 'G5', 'B5', 'E6'], 0.04, 'pulse12', 0.16, 0.1); break;
       case 'horn': this.tone('pulse50', freq('A2'), t, 0.6, 0.2, out, 1); this.tone('pulse50', freq('E3'), t, 0.6, 0.12, out, 1); break;
+      // ---------- Cinematic effects ----------
+      case 'blip': this.tone('pulse25', 880 + Math.random() * 60, t, 0.025, 0.06, out); break;
+      case 'blipLow': this.tone('pulse50', 330 + Math.random() * 30, t, 0.03, 0.07, out); break;
+      case 'whoosh': this.noiseHit(t, 0.45, 0.22, 400, 'bandpass', out, 4000); break;
+      case 'heart':
+        this.tone('triangle', 60, t, 0.12, 0.5, out, 0, 35);
+        this.tone('triangle', 55, t + 0.22, 0.14, 0.4, out, 0, 32);
+        break;
+      case 'riser': this.noiseHit(t, 2.6, 0.18, 200, 'bandpass', out, 6000); this.tone('sawtooth', 60, t, 2.6, 0.06, out, 0, 480); break;
+      case 'impact':
+        this.noiseHit(t, 2.2, 0.7, 2400, 'lowpass', out, 40);
+        this.tone('triangle', 80, t, 1.4, 0.6, out, 0, 22);
+        this.tone('sawtooth', 45, t, 0.9, 0.2, out, 0, 20);
+        this.noiseHit(t, 0.3, 0.3, 6000, 'highpass', out);
+        break;
+      case 'shimmer': seq(['C6', 'G6', 'E6', 'C7', 'G6', 'E7'], 0.05, 'pulse12', 0.07, 0.3); break;
+      case 'sting':
+        // Studio ident: a brass fanfare over a timpani roll.
+        for (let i = 0; i < 10; i++) this.noiseHit(t + i * 0.05, 0.06, 0.05 + i * 0.01, 300, 'lowpass', out);
+        [['C4', 'E4', 'G4'], ['F4', 'A4', 'C5'], ['G4', 'B4', 'D5'], ['C5', 'E5', 'G5', 'C6']].forEach((ch, i) =>
+          ch.forEach(n => this.tone('pulse50', freq(n), t + 0.5 + i * 0.28, i === 3 ? 1.6 : 0.24, 0.07, out, i === 3 ? 2 : 0)));
+        this.tone('triangle', 65, t + 1.34, 1.2, 0.4, out, 0, 50);
+        break;
+      case 'alarm': for (let i = 0; i < 3; i++) this.tone('sawtooth', 520, t + i * 0.5, 0.35, 0.07, out, 0, 760); break;
+      case 'thud': this.tone('triangle', 120, t, 0.12, 0.4, out, 0, 50); this.noiseHit(t, 0.12, 0.2, 800, 'lowpass', out); break;
     }
   }
 

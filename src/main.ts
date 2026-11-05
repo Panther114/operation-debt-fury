@@ -148,14 +148,14 @@ function endGame(): void {
   fanfareUntil = performance.now() + 60000;
   setTimeout(() => {
     audio.setTrack('frenzy');
-    playFilm(beat => {
-      if (beat === 'fanfare') audio.setTrack('fanfare');
-      else if (beat === 'hum') audio.play('audit');
-      else audio.play(beat);
+    playFilm({
+      sfx: name => audio.play(name),
+      music: track => { if (track) { audio.duck(false); audio.setTrack(track); } else audio.duck(true); },
     }, () => {
+      audio.duck(false);
       audio.setTrack('fanfare');
       showEnding(state, hof, restartUniverse);
-    }, state.settings.reducedMotion);
+    }, { reducedMotion: state.settings.reducedMotion });
   }, 1200);
 }
 

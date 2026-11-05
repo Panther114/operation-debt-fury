@@ -35,7 +35,7 @@ npm run build
 | Presidential events | Tariff tantrums, 3 a.m. all-caps posts, Super Bowl flyovers and other timed boosts. |
 | Districts | Each asset lists the congressional district that builds it. |
 | Final level | Big Bang 2: The Sequel opens once a Dyson Sphere is owned. Five phases are each priced in seconds of steady spending and followed by a construction period; the fifth ends the game. |
-| Ending | A 33-second pixel-art closing film (the Oval Office at 2:59 a.m., the countdown, the universe spent into a singularity, the Big Bang 2, Universe 2 with no debt, the credits), then the Final Audit Report with playthrough time, grade, statistics and the Hall of Fame. The game cannot be continued; a new universe resets everything except the Hall of Fame. |
+| Ending | A 39-second pixel-art closing film rendered at 320 × 180 with integer scaling, Bayer-dithered lighting and transitions, a 5 × 7 bitmap font and integer-crop camera cuts. Its nine shots are a studio ident, the White House at 2:59 a.m., an Oval Office dialogue, the button insert with impact frames, the universe spent into a black hole, silence, the Big Bang 2 title, Universe 2 with no debt, and the credits. The Final Audit Report follows with playthrough time, grade, statistics and the Hall of Fame. The game cannot be continued; a new universe resets everything except the Hall of Fame. |
 | Medals | 113 achievements, each adding +1% morale. Secret medals are included. |
 | Audio | Four original tracks (Appropriations March, War Room Briefing, Emergency Supplemental, New Administration Fanfare). Layers are added as spending rises, and around 20 sound effects are synthesised. |
 
