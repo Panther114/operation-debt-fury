@@ -1,5 +1,9 @@
 // Procedural chiptune engine: square/triangle/noise voices, a look-ahead step sequencer,
 // original tracks with intensity layers, and synthesised sound effects.
+//
+// Mix bus: every track channel has its own bus (pan, sidechain pump, echo send). The music bus
+// feeds a tempo-synced dotted-eighth echo and a short generated room reverb, so the square waves
+// sit in a space instead of sounding dry.
 import { TRACKS, type Track } from './tracks';
 
 const NOTE: Record<string, number> = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
@@ -21,6 +25,9 @@ class AudioEngine {
   private sfx!: GainNode;
   private noise!: AudioBuffer;
   private pulse: Record<string, PeriodicWave> = {};
+  private echoIn!: GainNode;
+  private echoDelay!: DelayNode;
+  private buses = new Map<string, { gain: GainNode; side: boolean }>();
   private track: Track = TRACKS.march;
   private wanted = 'march';
   private step = 0;
@@ -46,6 +53,31 @@ class AudioEngine {
     this.sfx = ctx.createGain();
     this.music.connect(this.master);
     this.sfx.connect(this.master);
+    // Echo: dotted-eighth delay with a darkening feedback loop, returned into the music bus.
+    this.echoIn = ctx.createGain();
+    this.echoDelay = ctx.createDelay(2);
+    this.echoDelay.delayTime.value = 0.36;
+    const echoTone = ctx.createBiquadFilter();
+    echoTone.type = 'lowpass'; echoTone.frequency.value = 2600;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.36;
+    const echoOut = ctx.createGain();
+    echoOut.gain.value = 0.55;
+    this.echoIn.connect(this.echoDelay).connect(echoTone).connect(feedback).connect(this.echoDelay);
+    echoTone.connect(echoOut).connect(this.music);
+    // Room: a generated stereo impulse response (decaying noise, about 1.6 s).
+    const len = Math.floor(ctx.sampleRate * 1.6);
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3.2;
+    }
+    const room = ctx.createConvolver();
+    room.buffer = ir;
+    const roomSend = ctx.createGain(), roomTone = ctx.createBiquadFilter();
+    roomSend.gain.value = 0.2;
+    roomTone.type = 'highpass'; roomTone.frequency.value = 220;
+    this.music.connect(roomTone).connect(roomSend).connect(room).connect(this.master);
     this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -88,6 +120,63 @@ class AudioEngine {
     if (TRACKS[name]) this.wanted = name;
   }
 
+  /** Starts a track right now, from its first step or from `from`, and brings the music back in (cinematics). */
+  playNow(name: string, from = 0): void {
+    if (!TRACKS[name]) return;
+    this.wanted = name;
+    this.enter(TRACKS[name]);
+    this.step = Math.max(0, Math.floor(from));
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.nextTime = t + 0.03;
+    this.ducked = false;
+    this.music.gain.cancelScheduledValues(t);
+    this.music.gain.setTargetAtTime(this.vol.music * 0.55, t, 0.03);
+  }
+
+  private enter(tr: Track): void {
+    this.track = tr;
+    this.step = 0;
+    if (this.ctx) this.echoDelay.delayTime.setTargetAtTime((60 / tr.bpm) * 0.75, this.ctx.currentTime, 0.02);
+  }
+
+  /** The persistent bus of one channel of a track: pan, echo send and sidechain gain. */
+  private bus(tr: Track, i: number): GainNode {
+    const key = tr.id + ':' + i;
+    let b = this.buses.get(key);
+    if (!b) {
+      const ctx = this.ctx!, ch = tr.channels[i];
+      const gain = ctx.createGain();
+      let out: AudioNode = gain;
+      if (ch.pan && ctx.createStereoPanner) {
+        const p = ctx.createStereoPanner();
+        p.pan.value = ch.pan;
+        out = gain.connect(p);
+      }
+      out.connect(this.music);
+      if (ch.echo) {
+        const send = ctx.createGain();
+        send.gain.value = ch.echo;
+        out.connect(send).connect(this.echoIn);
+      }
+      b = { gain, side: !!ch.side };
+      this.buses.set(key, b);
+    }
+    return b.gain;
+  }
+
+  /** Sidechain pump: channels marked `side` dip under every kick of the current track. */
+  private pump(when: number): void {
+    const tr = this.track;
+    tr.channels.forEach((ch, i) => {
+      if (!ch.side) return;
+      const g = this.bus(tr, i).gain;
+      g.cancelScheduledValues(when);
+      g.setValueAtTime(0.35, when);
+      g.setTargetAtTime(1, when + 0.02, 0.07);
+    });
+  }
+
   get trackName(): string { return this.track.name; }
 
   private schedule(): void {
@@ -99,46 +188,60 @@ class AudioEngine {
       const len = tr.bars * 16;
       const st = this.step % len;
       if (st % 16 === 0 && this.wanted !== tr.id) {
-        this.track = TRACKS[this.wanted];
-        this.step = 0;
+        this.enter(TRACKS[this.wanted]);
         continue;
       }
-      for (const ch of tr.channels) {
-        if (ch.layer > this.intensity) continue;
-        const ev = ch.notes[Math.floor(st / ch.every) % ch.notes.length];
-        if (st % ch.every !== 0 || !ev || ev === '.') continue;
+      tr.channels.forEach((ch, i) => {
+        if (ch.layer > this.intensity || st % ch.every !== 0) return;
+        const idx = Math.floor(st / ch.every) % ch.notes.length;
+        const ev = ch.notes[idx];
+        if (!ev || ev === '.' || ev === '-') return;
+        // Each '-' after a note holds it for another `every` steps.
+        let hold = 0;
+        while (idx + hold + 1 < ch.notes.length && ch.notes[idx + hold + 1] === '-') hold++;
         const when = this.nextTime + (ch.swing && (st / ch.every) % 2 === 1 ? stepDur * 0.15 : 0);
-        const dur = stepDur * ch.every * (ch.gate ?? 0.8);
-        if (ch.wave === 'drum') this.drum(ev, when, ch.vol);
-        else for (const n of ev.split('+')) this.tone(ch.wave, freq(n), when, dur, ch.vol, this.music, ch.vibrato);
-      }
+        const dur = stepDur * ch.every * (hold + (ch.gate ?? 0.8));
+        const dest = this.bus(tr, i);
+        if (ch.wave === 'drum') this.drum(ev, when, ch.vol, dest);
+        else for (const n of ev.split('+')) this.tone(ch.wave, freq(n), when, dur, ch.vol, dest, ch.vibrato, 0, ch.detune, ch.attack);
+      });
       this.nextTime += stepDur;
       this.step++;
     }
   }
 
-  private tone(wave: string, f: number, when: number, dur: number, vol: number, dest: AudioNode, vibrato = 0, slideTo = 0): void {
+  private tone(wave: string, f: number, when: number, dur: number, vol: number, dest: AudioNode, vibrato = 0, slideTo = 0, detune = 0, attack = 0.005): void {
     if (!f) return;
     const ctx = this.ctx!;
-    const o = ctx.createOscillator();
     const g = ctx.createGain();
-    if (wave.startsWith('pulse')) o.setPeriodicWave(this.pulse[{ pulse12: 0.125, pulse25: 0.25, pulse50: 0.5 }[wave] ?? 0.5]);
-    else o.type = wave as OscillatorType;
-    o.frequency.setValueAtTime(f, when);
-    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, when + dur);
-    if (vibrato) {
-      const lfo = ctx.createOscillator(), lg = ctx.createGain();
-      lfo.frequency.value = 5.5; lg.gain.value = f * 0.006 * vibrato;
-      lfo.connect(lg).connect(o.frequency);
-      lfo.start(when); lfo.stop(when + dur + 0.05);
+    // A detuned pair (in cents) gives a chorused voice; each oscillator is scaled to keep the level.
+    const voices = detune ? [-detune / 2, detune / 2] : [0];
+    const lvl = detune ? vol * 0.62 : vol;
+    for (const cents of voices) {
+      const o = ctx.createOscillator();
+      if (wave.startsWith('pulse')) o.setPeriodicWave(this.pulse[{ pulse12: 0.125, pulse25: 0.25, pulse50: 0.5 }[wave] ?? 0.5]);
+      else o.type = wave as OscillatorType;
+      o.frequency.setValueAtTime(f, when);
+      if (cents) o.detune.value = cents;
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, when + dur);
+      if (vibrato) {
+        // Delayed vibrato: short notes stay clean and held notes begin to sing.
+        const lfo = ctx.createOscillator(), lg = ctx.createGain();
+        lfo.frequency.value = 5.5;
+        lg.gain.setValueAtTime(0, when);
+        lg.gain.linearRampToValueAtTime(f * 0.006 * vibrato, when + Math.min(0.35, dur * 0.6));
+        lfo.connect(lg).connect(o.frequency);
+        lfo.start(when); lfo.stop(when + dur + 0.05);
+      }
+      o.connect(g);
+      o.start(when);
+      o.stop(when + dur + 0.15);
     }
     g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(vol, when + 0.005);
-    g.gain.setTargetAtTime(vol * 0.6, when + 0.02, 0.05);
+    g.gain.linearRampToValueAtTime(lvl, when + attack);
+    g.gain.setTargetAtTime(lvl * 0.6, when + attack + 0.015, 0.05 + attack);
     g.gain.setTargetAtTime(0, when + dur, 0.02);
-    o.connect(g).connect(dest);
-    o.start(when);
-    o.stop(when + dur + 0.15);
+    g.connect(dest);
   }
 
   private noiseHit(when: number, dur: number, vol: number, filterFreq: number, type: BiquadFilterType, dest: AudioNode, sweepTo = 0): void {
@@ -156,25 +259,31 @@ class AudioEngine {
     src.stop(when + dur + 0.05);
   }
 
-  private drum(kind: string, when: number, vol: number): void {
+  private drum(kind: string, when: number, vol: number, dest: AudioNode = this.music): void {
     const ctx = this.ctx!;
     if (kind === 'K') {
+      // A pitch-swept sine body with a short click; it also drives the sidechain pump.
       const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.setValueAtTime(140, when);
-      o.frequency.exponentialRampToValueAtTime(40, when + 0.12);
-      g.gain.setValueAtTime(vol * 1.4, when);
-      g.gain.exponentialRampToValueAtTime(0.001, when + 0.18);
-      o.connect(g).connect(this.music);
-      o.start(when); o.stop(when + 0.2);
+      o.frequency.setValueAtTime(160, when);
+      o.frequency.exponentialRampToValueAtTime(42, when + 0.11);
+      g.gain.setValueAtTime(vol * 1.6, when);
+      g.gain.exponentialRampToValueAtTime(0.001, when + 0.24);
+      o.connect(g).connect(dest);
+      o.start(when); o.stop(when + 0.26);
+      this.noiseHit(when, 0.012, vol * 0.35, 3500, 'highpass', dest);
+      this.pump(when);
     } else if (kind === 'S') {
-      this.noiseHit(when, 0.14, vol, 1800, 'bandpass', this.music);
-      this.tone('triangle', 190, when, 0.05, vol * 0.5, this.music);
+      this.noiseHit(when, 0.16, vol * 0.9, 1900, 'bandpass', dest);
+      this.noiseHit(when, 0.09, vol * 0.45, 6000, 'highpass', dest);
+      this.tone('triangle', 210, when, 0.06, vol * 0.55, dest, 0, 140);
     } else if (kind === 'r') {
-      this.noiseHit(when, 0.06, vol * 0.6, 2200, 'bandpass', this.music);
+      this.noiseHit(when, 0.06, vol * 0.55, 2200, 'bandpass', dest);
     } else if (kind === 'H') {
-      this.noiseHit(when, 0.04, vol * 0.5, 7000, 'highpass', this.music);
+      this.noiseHit(when, 0.035, vol * 0.45, 8000, 'highpass', dest);
+    } else if (kind === 'O') {
+      this.noiseHit(when, 0.2, vol * 0.35, 7500, 'highpass', dest);
     } else if (kind === 'C') {
-      this.noiseHit(when, 0.6, vol * 0.6, 5000, 'highpass', this.music);
+      this.noiseHit(when, 1.1, vol * 0.5, 5000, 'highpass', dest);
     }
   }
 
@@ -200,7 +309,7 @@ class AudioEngine {
       case 'goldenOpen': seq(['C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7'], 0.04, 'pulse25', 0.2, 0.15); this.noiseHit(t, 0.4, 0.1, 6000, 'highpass', out); break;
       case 'achievement': seq(['G5', 'C6', 'E6', 'G6'], 0.08, 'pulse50', 0.15, 0.2); this.tone('triangle', freq('C4'), t + 0.24, 0.5, 0.3, out); break;
       case 'rank': seq(['C5', 'C5', 'C5', 'G5', 'E5', 'G5', 'C6'], 0.09, 'pulse50', 0.15, 0.12); break;
-      case 'prestige': seq(['C4', 'G4', 'C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7'], 0.09, 'pulse25', 0.2, 0.4); this.drum('C', t, 0.5); break;
+      case 'prestige': seq(['C4', 'G4', 'C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7'], 0.09, 'pulse25', 0.2, 0.4); this.drum('C', t, 0.5, out); break;
       case 'audit':
         for (let i = 0; i < 4; i++) this.tone('pulse50', 660, t + i * 0.3, 0.15, 0.15, out, 0, 880);
         break;

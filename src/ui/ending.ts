@@ -16,7 +16,7 @@ export function verdictFor(time: number): { grade: string; text: string } {
 }
 
 /** Shows the Final Audit Report. It covers the whole game and offers only a fresh start. */
-export function showEnding(s: GameState, hof: HofEntry[], onRestart: () => void): void {
+export function showEnding(s: GameState, hof: HofEntry[], onRestart: () => void, onBack?: () => void): void {
   const end = s.ended!;
   const v = verdictFor(end.time);
   const place = hof.findIndex(e => e.at === end.at);
@@ -67,7 +67,9 @@ export function showEnding(s: GameState, hof: HofEntry[], onRestart: () => void)
           h('table.stats-table.end-hof', {}, ...best))),
       h('div.end-potus', {}, spriteImg('potus_thumbs', 0, 96, 96),
         h('div.end-quote', {}, '"Great universe. Beautiful universe. We spent all of it. Now we get a new one, and the new one has NO DEBT. Incredible. Let\'s go!"')),
-      go,
+      h('div.end-actions', {},
+        onBack ? h('button.film-btn', { onclick: onBack }, '◂ RETURN TO TITLE') : null,
+        go),
       h('div.sp-fine', {}, 'Progress, medals and political capital are reset. Only the Hall of Fame survives the singularity.')));
   const host = $('#splash');
   host.replaceChildren(root);

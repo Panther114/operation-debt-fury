@@ -2,13 +2,13 @@ import './ui/styles.css';
 import './ui/americana.css';
 import { ASSETS } from './data/assets';
 import { newState, type GameState } from './core/state';
-import { loadLocal, recordHallOfFame, saveLocal, SAVE_KEY, wipeLocal } from './core/save';
+import { loadLocal, recordHallOfFame, saveLocal, SAVE_KEY, wipeLocal, type HofEntry } from './core/save';
 import * as E from './core/economy';
 import { on } from './core/bus';
 import { checkAchievements, openBriefcase, resolveAudit, scheduleBriefcase, updateEvents } from './core/events';
-import { fmt, money } from './core/format';
+import { duration, fmt, money } from './core/format';
 import { Board } from './board/board';
-import { audio } from './audio/audio';
+import { audio, type Sfx } from './audio/audio';
 import { spriteImg } from './art/sprite';
 import { $, h, setText } from './ui/dom';
 import { closeModal, flash, floatNumber, flyBills, modalOpen, openModal, refreshTip, toast } from './ui/overlay';
@@ -22,7 +22,7 @@ import { initPresident, randomPost, say, updatePresident } from './ui/president'
 import { showSplash } from './ui/splash';
 import { FINALE } from './data/finale';
 import { showEnding, verdictFor } from './ui/ending';
-import { playFilm } from './ui/film';
+import { playFilm, TITLE_HOLD } from './ui/film';
 
 const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
 
@@ -146,17 +146,32 @@ function endGame(): void {
   closeModal();
   say(FINALE[FINALE.length - 1].post, 'shout', false);
   fanfareUntil = performance.now() + 60000;
-  setTimeout(() => {
-    audio.setTrack('frenzy');
-    playFilm({
-      sfx: name => audio.play(name),
-      music: track => { if (track) { audio.duck(false); audio.setTrack(track); } else audio.duck(true); },
-    }, () => {
-      audio.duck(false);
-      audio.setTrack('fanfare');
-      showEnding(state, hof, restartUniverse);
-    }, { reducedMotion: state.settings.reducedMotion });
-  }, 1200);
+  setTimeout(() => playFilm(filmAudio, { reducedMotion: state.settings.reducedMotion, conclusion: conclusion(hof) }), 1200);
+}
+
+const filmAudio = {
+  sfx: (name: Sfx) => audio.play(name),
+  music: (track: string | null, from?: number) => { if (track) audio.playNow(track, from); else audio.duck(true); },
+};
+
+/** The closing title held after the film: the report or a new universe, at the player's choice. */
+function conclusion(hof: HofEntry[]) {
+  const e = state.ended!;
+  const universe = Math.max(1, hof.length);
+  return {
+    line: `Universe ${universe} spent in ${duration(e.time)} - Grade ${verdictFor(e.time).grade}`,
+    onStats: () => showEnding(state, hof, restartUniverse, () => showTitle(hof)),
+    onRestart: restartUniverse,
+  };
+}
+
+/** Shows the closing title on its own (after the report, or when a finished game is reloaded). */
+function showTitle(hof: HofEntry[]): void {
+  const host = $('#splash');
+  host.classList.remove('show', 'ending');
+  host.replaceChildren();
+  audio.setTrack('anthem');
+  playFilm(filmAudio, { reducedMotion: state.settings.reducedMotion, startAt: TITLE_HOLD, conclusion: conclusion(hof) });
 }
 
 // ---------- Pallet ----------
@@ -440,10 +455,9 @@ window.addEventListener('storage', e => {
 persist();
 
 if (state.ended) {
-  // A finished game cannot be continued: show the report until a new universe is started.
-  const hof = recordEnd();
-  showEnding(state, hof, restartUniverse);
-  window.addEventListener('pointerdown', () => { audio.start(); audio.setTrack('fanfare'); }, { once: true });
+  // A finished game cannot be continued: hold the closing title until a new universe is started.
+  showTitle(recordEnd());
+  window.addEventListener('pointerdown', () => { audio.start(); audio.setTrack('anthem'); }, { once: true });
 } else showSplash(!state.clicks && !state.prestiges, () => {
   audio.start();
   audio.play('prestige');

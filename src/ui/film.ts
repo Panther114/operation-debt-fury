@@ -15,16 +15,19 @@
 //   7. Big Bang 2: impact frames, shock rings, debris and the title.
 //   8. Universe 2: a new planet at sunrise, a debt clock at $0.00, and the President.
 //   9. Credits and THE END.
+//  10. Conclusion: the full game title over the new world at sunrise. It is held indefinitely
+//      (with ambient animation) until the player opens the Final Audit Report or restarts.
 import { h } from './dom';
 import { raster, type Raster } from '../art/sprite';
 import { ASSETS } from '../data/assets';
 import { money } from '../core/format';
 import type { Sfx } from '../audio/audio';
+import { ANTHEM_ROCKETS, ANTHEM_TOP } from '../audio/tracks';
 
 export interface FilmAudio {
   sfx(name: Sfx): void;
   /** Switches the score; null fades the music out. */
-  music(track: string | null): void;
+  music(track: string | null, from?: number): void;
 }
 
 const W = 320, H = 180;
@@ -439,9 +442,19 @@ export interface FilmOptions {
   freezeAt?: number;
   /** Development aid: receives the frame renderer, for stepping through the film. */
   expose?: (render: (t: number) => void) => void;
+  /** The closing title that follows the credits and is held until the player chooses. */
+  conclusion?: {
+    /** One line under the title, e.g. the playthrough time and grade. */
+    line: string;
+    onStats: () => void;
+    onRestart: () => void;
+  };
 }
 
-export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions = {}): () => void {
+/** Starts the film at the closing title, already settled with its buttons visible. */
+export const TITLE_HOLD = FILM_LENGTH + 4.5;
+
+export function playFilm(audio: FilmAudio, opts: FilmOptions = {}): () => void {
   const reducedMotion = !!opts.reducedMotion;
   const cv = h('canvas.film-cv') as HTMLCanvasElement;
   cv.width = W; cv.height = H;
@@ -455,13 +468,18 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
   wctx.imageSmoothingEnabled = false;
 
   const skip = h('button.film-skip', {}, 'SKIP ▸▸');
-  const root = h('div.film', {}, cv, skip);
+  const RESTART_LABEL = '★ BEGIN A NEW UNIVERSE ★';
+  const statsBtn = h('button.film-btn', {}, 'VIEW FINAL REPORT');
+  const restartBtn = h('button.film-btn.primary', {}, RESTART_LABEL);
+  const stage = h('div.film-stage', {}, cv, h('div.film-end', {}, statsBtn, restartBtn));
+  const root = h('div.film', {}, stage, skip);
+  if ((opts.startAt ?? 0) >= FILM_LENGTH) skip.hidden = true;
   document.body.append(root);
   const fit = () => {
     const s = Math.min(innerWidth / W, innerHeight / H);
     const k = s >= 1 ? Math.floor(s) : s;
-    cv.style.width = `${W * k}px`;
-    cv.style.height = `${H * k}px`;
+    for (const el of [cv, stage]) { el.style.width = `${W * k}px`; el.style.height = `${H * k}px`; }
+    stage.style.setProperty('--k', String(k));
   };
   fit();
   addEventListener('resize', fit);
@@ -1192,32 +1210,138 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
     dfill(c, K, clamp((u - 4.9) / 0.5) * 16);
   }
 
+  // ---------- Conclusion ----------
+  const TITLE_Y = 48;
+  const titleKicker = canvasOf(W, H, c => text(c, 'THE UNITED STATES DEPARTMENT OF WAR PRESENTS', 160, 18, { align: 'center', color: GREY_L, outline: K }));
+  const titleOp = canvasOf(W, H, c => text(c, 'OPERATION', 160, 29, { font: FP, scale: 2, align: 'center', spacing: 1, color: GOLD, outline: K, shadows: [GOLD_DD, '#4a3008'] }));
+  const titleMask = canvasOf(W, H, c => text(c, 'DEBT FURY', 160, TITLE_Y, { font: FP, scale: 4, align: 'center', spacing: 1, color: WHITE }));
+  const titleTag = "SPEND THE TAXPAYER'S MONEY";
+  const infoLine = (opts.conclusion?.line ?? '').toUpperCase();
+  const planetDrop = 20;
+  const surfaceY = (x: number) => 400 + planetDrop - Math.sqrt(280 * 280 - (x - 160) ** 2);
+  const potusW = P.thumbs.canvas.width, potusH = P.thumbs.canvas.height;
+  const taxW = taxpayer.canvas.width, taxH = taxpayer.canvas.height;
+
+  /** Firework shells over the new world, on a fixed pseudo-random schedule. */
+  function fireworks(c: Ctx, u: number): void {
+    for (let k = 0; k < 3; k++) {
+      const period = 2.6, local = u - 3 + k * 0.87;
+      if (local < 0) continue;
+      const n = Math.floor(local / period), age = local - n * period;
+      if (age > 1.35) continue;
+      const seed = n * 7 + k * 13;
+      const fx = Math.round(24 + hash2(seed, 1, 3) * 272), fy = Math.round(26 + hash2(seed, 2, 3) * 52);
+      const col = [GOLD, RED_L, '#6fd3f0', WHITE, '#ff6ad5'][Math.floor(hash2(seed, 3, 3) * 5)];
+      if (age < 0.35) { rect(c, fx, fy + (1 - age / 0.35) * 70, 1, 2, pat(GOLD, 12)); continue; }
+      const a = age - 0.35, r = easeOut(a / 0.9) * 24, fade = 16 * (1 - a / 1.0), drop = a * a * 10;
+      for (let i = 0; i < 20; i++) {
+        const ang = (i / 20) * Math.PI * 2;
+        rect(c, fx + Math.cos(ang) * r, fy + Math.sin(ang) * r + drop, 1, 1, pat(col, fade));
+        rect(c, fx + Math.cos(ang) * r * 0.75, fy + Math.sin(ang) * r * 0.75 + drop * 0.8, 1, 1, pat(col, fade * 0.45));
+      }
+      if (a < 0.08) star4(c, fx, fy, 2, WHITE);
+    }
+  }
+
+  function conclusion(c: Ctx, u: number, t: number): void {
+    // Sky, stars and the sun cresting the limb of the new world, with slowly turning rays.
+    rect(c, 0, 0, W, H, K);
+    c.drawImage(nebulaB, 0, 0);
+    dfill(c, K, 8);
+    drawStars(c, t, -t * 2, 0, 14);
+    const sunY = 142;
+    for (let i = 0; i < 9; i++) {
+      const a = Math.PI + (i / 8) * Math.PI + Math.sin(t * 0.15) * 0.08, w = 0.05;
+      poly(c, [[160, sunY], [160 + Math.cos(a - w) * 340, sunY + Math.sin(a - w) * 340], [160 + Math.cos(a + w) * 340, sunY + Math.sin(a + w) * 340]], pat(i % 2 ? GOLD : '#ff9a6a', 1));
+    }
+    glow(c, 160, sunY, 110, '#8a2f6e', 3);
+    glow(c, 160, sunY, 70, '#ffd98a', 5);
+    fireworks(c, u);
+    // Shooting star every 7 seconds.
+    const sh = (u + 2) % 7;
+    if (sh < 0.5) {
+      const x0 = 300 - sh * 260, y0 = 20 + sh * 60;
+      line(c, x0, y0, x0 + 14, y0 - 3, pat(WHITE, 7));
+      rect(c, x0, y0, 1, 1, WHITE);
+    }
+    disc(c, 160, sunY, 9, '#fff6c8');
+    disc(c, 160, 400 + planetDrop, 285, pat('#7fd4ff', 4));
+    disc(c, 160, 400 + planetDrop, 282, pat('#bfe9ff', 9));
+    c.drawImage(newWorld, 0, planetDrop);
+    // The President, a flag and the taxpayer stand on the new world.
+    const px = 10, py = Math.round(surfaceY(px + potusW / 2)) - potusH + 2;
+    spr(c, Math.floor(t * 10) % 31 === 0 ? P.blink : P.thumbs, px, py);
+    const fx = px + potusW + 2, fy = Math.round(surfaceY(fx)) - 30;
+    rect(c, fx, fy, 1, 30, GREY_L);
+    spr(c, flag, fx + 1, fy + (Math.floor(t * 3) % 2));
+    const tx = W - taxW - 14, ty = Math.round(surfaceY(tx + taxW / 2)) - taxH + 2;
+    spr(c, taxpayerSad, tx, ty);
+    dfill(c, K, (1 - clamp(u / 0.8)) * 16);
+
+    // Title block.
+    sprDither(c, titleKicker, 0, 0, clamp((u - 0.3) / 0.3) * 16);
+    sprDither(c, titleOp, 0, 0, clamp((u - 0.5) / 0.3) * 16);
+    if (u > 0.9) {
+      const a = u - 0.9, s = a < 0.04 ? 6 : a < 0.08 ? 5 : 4;
+      text(c, 'DEBT FURY', 160, TITLE_Y - (s - 4) * 12, { font: FP, scale: s, align: 'center', spacing: 1, color: WHITE, outline: K, shadows: [RED, '#1f2f6e'] });
+      // A light sweep crosses the title every 5.5 seconds.
+      const ph = (u - 1.6) % 5.5;
+      if (u > 1.6 && ph < 1.1 && s === 4) {
+        const sx = lerp(-40, 380, ease(ph / 1.1));
+        sctx.clearRect(0, 0, W, H);
+        sctx.drawImage(titleMask, 0, 0);
+        sctx.globalCompositeOperation = 'source-atop';
+        poly(sctx, [[sx, 0], [sx + 6, 0], [sx - 40, H], [sx - 46, H]], '#ffffff');
+        poly(sctx, [[sx + 10, 0], [sx + 12, 0], [sx - 34, H], [sx - 36, H]], '#fff3c0');
+        sctx.globalCompositeOperation = 'source-over';
+        c.drawImage(sweep, 0, 0);
+      }
+      if (a < 0.07 && !reducedMotion) rect(c, 0, 0, W, H, pat(WHITE, 9));
+    }
+    const rw = Math.round(ease((u - 1.3) / 0.5) * 100);
+    if (rw > 0) {
+      rect(c, 160 - rw, 89, rw * 2 + 1, 1, GOLD_D);
+      star4(c, 160, 89, 2, GOLD);
+      if (rw >= 100) { star4(c, 59, 89, 1, GOLD_D); star4(c, 261, 89, 1, GOLD_D); }
+    }
+    if (u > 1.5) text(c, titleTag.slice(0, Math.floor((u - 1.5) * 40)), 160, 94, { font: FP, align: 'center', spacing: 1, color: GOLD, outline: K });
+    if (u > 2.1 && infoLine) text(c, infoLine.slice(0, Math.floor((u - 2.1) * 50)), 160, 106, { align: 'center', color: '#c9d4ff', outline: K });
+    // Twinkles around the title.
+    if (u > 1.4) for (let k = 0; k < 4; k++) {
+      const p = (u + k * 0.43) / 1.7, n = Math.floor(p), f = p - n;
+      if (f > 0.35) continue;
+      const x = Math.round(48 + hash2(n, k, 5) * 224), y = Math.round(28 + hash2(n, k, 6) * 58);
+      star4(c, x, y, f < 0.12 || f > 0.24 ? 1 : 2, f < 0.12 || f > 0.24 ? GOLD : WHITE);
+    }
+  }
+
   const RENDER: Record<string, (c: Ctx, u: number, t: number) => void> = {
     ident: (c, u) => ident(c, u), establish, office, button, collapse, silence: (c, u) => silence(c, u), bang, universe, credits,
+    conclusion,
   };
 
   // ---------- Score and sound cues ----------
   const cues: [number, () => void][] = [
     [0.1, () => { audio.music(null); audio.sfx('sting'); }],
     [1.15, () => audio.sfx('shimmer')],
-    [START.establish + 0.1, () => audio.sfx('whoosh')],
+    [START.establish, () => { audio.music('night'); audio.sfx('whoosh'); }],
     [START.establish + 3.2, () => audio.sfx('whoosh')],
-    [START.office + 0.2, () => audio.music('warroom')],
+    [START.office + 0.2, () => audio.music('brief')],
     [START.office + 5.4, () => audio.sfx('alarm')],
-    [START.button, () => { audio.music('frenzy'); audio.sfx('whoosh'); }],
+    [START.button, () => { audio.music('launch'); audio.sfx('whoosh'); }],
     [START.button + 0.3, () => audio.sfx('whoosh')],
     [START.button + 1.0, () => audio.sfx('thud')], [START.button + 1.6, () => audio.sfx('thud')], [START.button + 2.2, () => audio.sfx('thud')],
     [START.button + 2.3, () => audio.sfx('whoosh')],
     [START.button + 3.9, () => audio.sfx('whoosh')],
     [START.button + 4.05, () => { audio.music(null); audio.sfx('impact'); }],
     [START.button + 4.3, () => audio.sfx('click')],
-    [START.collapse + 0.1, () => { audio.music('frenzy'); audio.sfx('riser'); }],
+    [START.collapse + 0.1, () => { audio.music('launch'); audio.sfx('riser'); }],
     [START.collapse + 1.6, () => audio.sfx('boomFar')], [START.collapse + 2.6, () => audio.sfx('riser')], [START.collapse + 3.2, () => audio.sfx('boomFar')],
     [START.collapse + 4.2, () => audio.sfx('boom')], [START.collapse + 5.0, () => audio.sfx('whoosh')],
     [START.silence, () => audio.music(null)],
     [START.silence + 0.1, () => audio.sfx('heart')], [START.silence + 0.9, () => audio.sfx('heart')],
     [START.bang, () => audio.sfx('impact')],
-    [START.bang + 0.9, () => { audio.sfx('boom'); audio.music('fanfare'); }],
+    [START.bang + 0.9, () => { audio.sfx('boom'); audio.music('anthem', ANTHEM_ROCKETS); }],
     [START.bang + 1.35, () => audio.sfx('shimmer')],
     [START.universe + 1.0, () => audio.sfx('shimmer')],
     [START.universe + 1.7, () => audio.sfx('thud')],
@@ -1225,6 +1349,10 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
     [START.universe + 2.4, () => { audio.sfx('click'); audio.sfx('golden'); }],
     [START.credits + 3.6, () => audio.sfx('boom')],
     [START.credits + 4.0, () => audio.sfx('rank')],
+    [START.credits + 4.7, () => audio.music(null)],
+    // The closing title: the anthem drops back in from its first bar on the title slam.
+    [FILM_LENGTH + 0.9, () => { audio.sfx('impact'); audio.music('anthem', ANTHEM_TOP); }],
+    [FILM_LENGTH + 1.5, () => audio.sfx('shimmer')],
   ].sort((a, b) => (a[0] as number) - (b[0] as number)) as [number, () => void][];
 
   // Camera shake per scene, in whole pixels.
@@ -1235,11 +1363,12 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
     if (scene === 'bang') return u < 1.2 ? 4 : u > 0.9 && u < 1.15 ? 5 : 0;
     if (scene === 'credits') return u > 3.6 && u < 3.8 ? 3 : 0;
     if (scene === 'universe') return u > 1.7 && u < 1.85 ? 2 : 0;
+    if (scene === 'conclusion') return u > 0.9 && u < 1.15 ? 3 : 0;
     return 0;
   };
 
   // ---------- Main loop ----------
-  let t0 = 0, next = 0, done = false, raf = 0, started = false;
+  let t0 = 0, next = 0, done = false, raf = 0, started = false, settled = false;
   const finish = () => {
     if (done) return;
     done = true;
@@ -1248,17 +1377,39 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
     removeEventListener('keydown', onKey);
     root.classList.add('out');
     setTimeout(() => root.remove(), 700);
-    onDone();
   };
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') finish(); };
+  /** Skips the rest of the film and goes straight to the closing title. */
+  const toTitle = () => {
+    if (!started || done || (performance.now() - t0) / 1000 >= FILM_LENGTH) return;
+    t0 = performance.now() - FILM_LENGTH * 1000;
+    while (next < cues.length && cues[next][0] < FILM_LENGTH) next++;
+    audio.music(null);
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') toTitle(); };
   addEventListener('keydown', onKey);
-  skip.addEventListener('click', finish);
+  skip.addEventListener('click', toTitle);
+  statsBtn.addEventListener('click', () => { if (!settled) return; audio.sfx('click'); finish(); opts.conclusion?.onStats(); });
+  // Two-step confirmation: the first click arms the button, the second starts the new universe.
+  let armed = 0;
+  restartBtn.addEventListener('click', () => {
+    if (!settled) return;
+    audio.sfx('click');
+    if (!armed) {
+      restartBtn.textContent = '★ CONFIRM: RESET EVERYTHING ★';
+      restartBtn.classList.add('armed');
+      armed = window.setTimeout(() => { armed = 0; restartBtn.textContent = RESTART_LABEL; restartBtn.classList.remove('armed'); }, 4000);
+      return;
+    }
+    clearTimeout(armed);
+    finish();
+    opts.conclusion?.onRestart();
+  });
 
   /** Draws the frame for time t (seconds). */
   const render = (t: number) => {
-    let scene = SCENES[SCENES.length - 1][0];
+    let scene = 'conclusion';
     for (const [id, d] of SCENES) if (t < START[id] + d) { scene = id; break; }
-    const u = t - START[scene];
+    const u = t - (scene === 'conclusion' ? FILM_LENGTH : START[scene]);
     const sh = shakeAt(scene, u);
     ctx.save();
     if (sh) ctx.translate(Math.round((hash2(Math.floor(t * 30), 1, 9) - 0.5) * 2 * sh), Math.round((hash2(Math.floor(t * 30), 2, 9) - 0.5) * 2 * sh));
@@ -1267,15 +1418,26 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
     dialogue(ctx, t);
     const impact = (scene === 'button' && u >= 4.05 && u < 4.3) || (scene === 'bang' && u < 0.2);
     if (!impact) ctx.drawImage(vignette, 0, 0);
-    rect(ctx, 0, 0, W, BAR, K);
-    rect(ctx, 0, H - BAR, W, BAR, K);
+    // The letterbox opens up for the closing title.
+    const bar = scene === 'conclusion' ? Math.round(BAR * (1 - ease(u / 1.2))) : BAR;
+    rect(ctx, 0, 0, W, bar, K);
+    rect(ctx, 0, H - bar, W, bar, K);
   };
   const frame = (now: number) => {
     if (done) return;
     const t = (now - t0) / 1000;
-    while (next < cues.length && cues[next][0] <= t) cues[next++][1]();
+    while (next < cues.length && cues[next][0] <= t) {
+      // Cues missed while the tab was hidden keep their music changes but drop their sound effects.
+      if (t - cues[next][0] > 0.5) {
+        const live = audio;
+        audio = { sfx: () => {}, music: live.music };
+        cues[next++][1]();
+        audio = live;
+      } else cues[next++][1]();
+    }
     render(t);
-    if (t >= FILM_LENGTH) { finish(); return; }
+    if (t >= FILM_LENGTH) skip.hidden = true;
+    if (!settled && t >= FILM_LENGTH + 2.6) { settled = true; root.classList.add('settled'); }
     raf = requestAnimationFrame(frame);
   };
   const begin = () => {
@@ -1288,22 +1450,18 @@ export function playFilm(audio: FilmAudio, onDone: () => void, opts: FilmOptions
       return;
     }
     // Pre-render a frame every half second so every dither tile and glyph is cached before playback.
+    const startAt = opts.startAt ?? 0;
     const live = audio;
     audio = { sfx: () => {}, music: () => {} };
-    for (let w = 0; w < FILM_LENGTH; w += 0.5) render(w);
+    for (let w = startAt >= FILM_LENGTH ? FILM_LENGTH : 0; w < FILM_LENGTH + 4; w += 0.5) render(w);
     audio = live;
     typed.clear();
     rect(ctx, 0, 0, W, H, K);
-    t0 = performance.now() - (opts.startAt ?? 0) * 1000;
-    while (next < cues.length && cues[next][0] < (opts.startAt ?? 0)) next++;
+    t0 = performance.now() - startAt * 1000;
+    while (next < cues.length && cues[next][0] < startAt) next++;
     raf = requestAnimationFrame(frame);
   };
   rect(ctx, 0, 0, W, H, K);
   begin();
-  // Animation frames stop in hidden tabs; make sure the film still ends.
-  const guard = setInterval(() => {
-    if (done) { clearInterval(guard); return; }
-    if (started && opts.freezeAt === undefined && (performance.now() - t0) / 1000 > FILM_LENGTH + 2) { clearInterval(guard); finish(); }
-  }, 1000);
   return finish;
 }

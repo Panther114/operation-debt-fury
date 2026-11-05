@@ -41,10 +41,31 @@ export const BACKUP_KEY = SAVE_KEY + '-backup';
 /** Raw contents of a main slot that failed to decode, kept so it is never silently overwritten. */
 export const CORRUPT_KEY = SAVE_KEY + '-corrupt';
 
+/**
+ * Progress epoch. Raising it resets every player's progress once on their next visit: saves written
+ * under an older epoch (or before epochs existed) are discarded. The Hall of Fame is kept.
+ */
+export const EPOCH_KEY = SAVE_KEY + '-epoch';
+export const RESET_EPOCH = 2;
+
+/** Discards saves from an older progress epoch. Returns true if a reset happened. */
+export function applyResetEpoch(): boolean {
+  try {
+    if (localStorage.getItem(EPOCH_KEY) === String(RESET_EPOCH)) return false;
+    const had = localStorage.getItem(SAVE_KEY) !== null || localStorage.getItem(BACKUP_KEY) !== null;
+    for (const k of [SAVE_KEY, BACKUP_KEY, CORRUPT_KEY]) localStorage.removeItem(k);
+    localStorage.setItem(EPOCH_KEY, String(RESET_EPOCH));
+    return had;
+  } catch {
+    return false;
+  }
+}
+
 /** Writes the save. Returns false if storage is unavailable or full. */
 export function saveLocal(s: GameState): boolean {
   s.lastSaved = Date.now();
   try {
+    localStorage.setItem(EPOCH_KEY, String(RESET_EPOCH));
     localStorage.setItem(SAVE_KEY, encode(s));
     return true;
   } catch {
@@ -57,6 +78,7 @@ export function saveLocal(s: GameState): boolean {
  * CORRUPT_KEY and the last known-good backup is used instead. A successful load refreshes the backup.
  */
 export function loadLocal(): GameState | null {
+  applyResetEpoch();
   let main: string | null = null;
   try { main = localStorage.getItem(SAVE_KEY); } catch { return null; }
   if (main) {
