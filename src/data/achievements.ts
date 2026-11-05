@@ -1,6 +1,7 @@
 import { ASSETS } from './assets';
 import { RESEARCH } from './research';
 import { RANKS, rankIndex } from './meta';
+import { GEO } from './politics';
 import type { GameState } from '../core/state';
 import type { Mods } from '../core/economy';
 import { money } from '../core/format';
@@ -19,7 +20,7 @@ const SPENT: [number, string][] = [
   [1e12, 'Trillion-Dollar Club'], [1e13, 'National Debt Enthusiast'], [1e14, 'Fiscal Cliff Diver'], [1e15, 'Quadrillionaire (Negative)'],
   [1e17, 'GDP of Several Planets'], [1e19, 'Unauditable'], [1e21, 'Sextillion Spree'], [1e24, 'Septillion Splurge'],
   [1e27, 'Octillion Overrun'], [1e30, 'Nonillion Nonchalance'], [1e33, 'Decillion Dollar Defense'], [1e39, 'Budget Event Horizon'],
-  [1e45, 'Heat Death of the Treasury'], [1e55, 'Beyond Appropriation'],
+  [3e40, 'Heat Death of the Treasury'], [1e41, 'Beyond Appropriation'],
 ];
 
 const RATE: [number, string][] = [
@@ -55,6 +56,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'prestige_5', name: 'Term Limits Are Suggestions', desc: 'Start 5 New Administrations.', check: s => s.prestiges >= 5 },
   { id: 'prestige_10', name: 'Career Politician', desc: 'Start 10 New Administrations.', check: s => s.prestiges >= 10 },
   { id: 'prestige_25', name: 'Permanent Government', desc: 'Start 25 New Administrations.', check: s => s.prestiges >= 25 },
+  { id: 'world_5', name: 'Gunboat Diplomat', desc: 'Complete 5 world operations in one administration.', check: s => s.geo.length >= 5 },
+  { id: 'world_15', name: 'Manifest Destiny (International Edition)', desc: 'Complete 15 world operations in one administration.', check: s => s.geo.length >= 15 },
+  { id: 'world_all', name: 'Leader of the Free World (and the Rest)', desc: 'Complete every world operation in one administration.', check: s => s.geo.length >= GEO.length },
+  { id: 'sequel', name: 'Greenlit', desc: 'Fund the first phase of Big Bang 2: The Sequel.', check: s => s.finale >= 1 },
   { id: 'wargame_5', name: 'Exercise Enthusiast', desc: 'Take part in 5 war games.', check: s => s.stats.wargames >= 5 },
   { id: 'chairman', name: 'Top Brass', desc: `Reach the rank of ${RANKS[17].name}.`, check: s => rankIndex(s.lifetime) >= 17 },
   { id: 'emperor', name: 'Ascended Procurement', desc: `Reach the rank of ${RANKS[RANKS.length - 1].name}.`, check: s => rankIndex(s.lifetime) >= RANKS.length - 1 },

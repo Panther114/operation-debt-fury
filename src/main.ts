@@ -2,7 +2,7 @@ import './ui/styles.css';
 import './ui/americana.css';
 import { ASSETS } from './data/assets';
 import { newState, type GameState } from './core/state';
-import { loadLocal, saveLocal, SAVE_KEY, wipeLocal } from './core/save';
+import { loadLocal, recordHallOfFame, saveLocal, SAVE_KEY, wipeLocal } from './core/save';
 import * as E from './core/economy';
 import { on } from './core/bus';
 import { checkAchievements, openBriefcase, resolveAudit, scheduleBriefcase, updateEvents } from './core/events';
@@ -20,6 +20,9 @@ import { ORDERS, RANKS, rankIndex } from './data/meta';
 import { DEPLOY_POSTS, EVENT_POSTS, GEO_BY_ID } from './data/politics';
 import { initPresident, randomPost, say, updatePresident } from './ui/president';
 import { showSplash } from './ui/splash';
+import { FINALE } from './data/finale';
+import { showEnding, verdictFor } from './ui/ending';
+import { playFilm } from './ui/film';
 
 const pick = <T,>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
 
@@ -116,6 +119,44 @@ function doPrestige(): void {
   });
   setTimeout(() => say(pick(EVENT_POSTS.prestige), 'point'), 7400);
   setTimeout(() => toast('New Administration Inaugurated', `+${fmt(gain)} Political Capital. Spend it on Executive Orders in the Administration tab.`, 'capitol', 'gold', 9000), 7000);
+}
+
+// ---------- The end ----------
+
+/** Records the completion in the Hall of Fame and returns the updated list. */
+function recordEnd() {
+  const e = state.ended!;
+  return recordHallOfFame({ time: e.time, at: e.at, lifetime: e.lifetime, clicks: e.clicks, prestiges: e.prestiges, grade: verdictFor(e.time).grade });
+}
+
+/** A fresh universe: everything is reset except the Hall of Fame, which lives in its own key. */
+function restartUniverse(): void {
+  wipeLocal();
+  state = newState();
+  persist();
+  location.reload();
+}
+
+let ending = false;
+function endGame(): void {
+  if (ending) return;
+  ending = true;
+  persist();
+  const hof = recordEnd();
+  closeModal();
+  say(FINALE[FINALE.length - 1].post, 'shout', false);
+  fanfareUntil = performance.now() + 60000;
+  setTimeout(() => {
+    audio.setTrack('frenzy');
+    playFilm(beat => {
+      if (beat === 'fanfare') audio.setTrack('fanfare');
+      else if (beat === 'hum') audio.play('audit');
+      else audio.play(beat);
+    }, () => {
+      audio.setTrack('fanfare');
+      showEnding(state, hof, restartUniverse);
+    }, state.settings.reducedMotion);
+  }, 1200);
 }
 
 // ---------- Pallet ----------
@@ -258,6 +299,16 @@ on('purchase', p => {
     audio.play('deploy');
     board.burst(0.5, 12);
   }
+  if (p.kind === 'finale' && p.id) {
+    if (state.ended) { endGame(); return; }
+    const phase = FINALE[state.finale - 1];
+    titleCard(`★ BIG BANG 2 · PHASE ${state.finale} OF ${FINALE.length} FUNDED ★`, phase.name.toUpperCase(), phase.effect, 'dyson', 3200);
+    say(phase.post, 'shout');
+    flash();
+    shake(0.7);
+    audio.play('prestige');
+    board.burst(0.5, 20);
+  }
   if (p.kind === 'order' && p.id) {
     const o = ORDERS.find(x => x.id === p.id);
     titleCard('EXECUTIVE ORDER SIGNED', (o?.name ?? '').toUpperCase(), 'Signed with a very large marker. Effective immediately. Legality pending.', spriteImg('potus_sign', 0, 132, 132), 3000);
@@ -328,7 +379,7 @@ function frame(now: number): void {
 setInterval(() => { if (performance.now() - last > 400) step(performance.now()); }, 500);
 
 function step(now: number): void {
-  if (dormant) return;
+  if (dormant || state.ended) return;
   // Clamp very long gaps (background tabs) so the simulation catches up in bounded chunks.
   const dt = Math.min(60, (now - last) / 1000);
   last = now;
@@ -388,7 +439,12 @@ window.addEventListener('storage', e => {
 // Claim the save for this tab immediately, so any older tab still open stops saving.
 persist();
 
-showSplash(!state.clicks && !state.prestiges, () => {
+if (state.ended) {
+  // A finished game cannot be continued: show the report until a new universe is started.
+  const hof = recordEnd();
+  showEnding(state, hof, restartUniverse);
+  window.addEventListener('pointerdown', () => { audio.start(); audio.setTrack('fanfare'); }, { once: true });
+} else showSplash(!state.clicks && !state.prestiges, () => {
   audio.start();
   audio.play('prestige');
   if (!state.clicks && !state.prestiges) {

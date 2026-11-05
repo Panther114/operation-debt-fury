@@ -71,7 +71,9 @@ function buildMask(): Uint8Array {
 }
 
 export function toCell(lon: number, lat: number): [number, number] {
-  if (lon > 900) return [MAP.cols - 7, 5];
+  // Off-map bodies are drawn in the top-right corner: Mars (999) and the Moon (998).
+  if (lon > 998.5) return [MAP.cols - 7, 5];
+  if (lon > 900) return [MAP.cols - 16, 4];
   return [(lon - MAP.lon0) / MAP.cell, (MAP.lat0 - lat) / MAP.cell];
 }
 
@@ -126,6 +128,20 @@ export function drawWorld(canvas: HTMLCanvasElement, done: Set<string>, hot: str
   ctx.beginPath(); ctx.arc(mx * P, my * P, 9, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#8e3a1a';
   ctx.fillRect(mx * P - 4, my * P - 2, 4, 3); ctx.fillRect(mx * P + 2, my * P + 3, 3, 2);
+  // The Moon, painted in stripes once renamed.
+  const [lx, ly] = toCell(998, 998);
+  ctx.fillStyle = '#c9ccd6';
+  ctx.beginPath(); ctx.arc(lx * P, ly * P, 6, 0, Math.PI * 2); ctx.fill();
+  if (done.has('moon')) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(lx * P, ly * P, 6, 0, Math.PI * 2); ctx.clip();
+    for (let i = -6; i < 6; i += 2) { ctx.fillStyle = i % 4 === 0 ? '#c8283a' : '#f2f2f2'; ctx.fillRect(lx * P - 6, ly * P + i, 12, 2); }
+    ctx.fillStyle = '#1f2f6e'; ctx.fillRect(lx * P - 6, ly * P - 6, 6, 6);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = '#9a9eab';
+    ctx.fillRect(lx * P - 3, ly * P - 2, 2, 2); ctx.fillRect(lx * P + 1, ly * P + 2, 3, 2);
+  }
   // Labels for completed operations.
   ctx.font = '8px Silkscreen, monospace';
   ctx.textAlign = 'center';

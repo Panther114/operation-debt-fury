@@ -4,21 +4,31 @@ import * as E from '../src/core/economy';
 import { PRESTIGE_DIV } from '../src/data/meta';
 
 describe('prestige', () => {
-  it('capital follows a cube-root curve', () => {
-    expect(E.capitalFor(PRESTIGE_DIV * 8)).toBe(2);
-    expect(E.capitalFor(PRESTIGE_DIV * 1000)).toBe(10);
+  it('capital is the square of the spending magnitude past $100 million', () => {
+    expect(E.capitalFor(PRESTIGE_DIV / 10)).toBe(0);
+    expect(E.capitalFor(1e9)).toBe(1);
+    expect(E.capitalFor(1e12)).toBe(16);
+    expect(E.capitalFor(1e28)).toBe(400);
+  });
+  it('next capital threshold is consistent with the curve', () => {
+    const s = newState(0);
+    s.lifetime = 1e12;
+    const next = E.nextCapitalAt(s);
+    expect(E.capitalFor(next * 1.0001)).toBe(17);
+    expect(E.capitalFor(next * 0.999)).toBe(16);
   });
   it('resets the run but keeps meta progress', () => {
     const s = newState(0);
-    s.lifetime = PRESTIGE_DIV * 125;
-    s.owned.recruit = 50; s.upgrades.push('recruit_0'); s.research.push('st1');
+    s.lifetime = 1e12;
+    s.owned.recruit = 50; s.upgrades.push('recruit_0'); s.research.push('st1'); s.finale = 2;
     s.achievements.push('spent_0');
     const gain = E.prestige(s);
-    expect(gain).toBe(5);
-    expect(s.capital).toBe(5);
+    expect(gain).toBe(16);
+    expect(s.capital).toBe(16);
     expect(s.owned).toEqual({});
     expect(s.upgrades).toEqual([]);
     expect(s.research).toEqual([]);
+    expect(s.finale).toBe(0);
     expect(s.achievements).toEqual(['spent_0']);
     expect(E.pendingCapital(s)).toBe(0);
   });
@@ -28,10 +38,10 @@ describe('prestige', () => {
   });
   it('executive orders cost capital and apply on reset', () => {
     const s = newState(0);
-    s.capital = 10;
+    s.capital = 30;
     expect(E.buyOrder(s, 'eo_start')).toBe(true);
     expect(E.buyOrder(s, 'eo_omnibus')).toBe(true);
-    expect(s.capital).toBe(1);
+    expect(s.capital).toBe(21);
     E.prestige(s);
     expect(s.budget).toBe(15 + 5e4);
     expect(s.owned.recruit).toBe(10);

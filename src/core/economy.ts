@@ -1,4 +1,5 @@
 import { GEO_BY_ID, type GeoOp } from '../data/politics';
+import { BUILD, FINALE, type FinalePhase } from '../data/finale';
 import { ASSETS, ASSET_BY_ID, type AssetDef } from '../data/assets';
 import { UPGRADE_BY_ID, type Effect, type Unlock, type UpgradeDef, UPGRADES } from '../data/upgrades';
 import { RESEARCH_BY_ID, type ResearchDef } from '../data/research';
@@ -7,6 +8,10 @@ import type { GameState } from './state';
 
 export const COST_GROWTH = 1.15;
 export const ACHIEVEMENT_BONUS = 0.01;
+/** Share of the "% of $/s" click bonus that intern (automatic) clicks receive. */
+export const INTERN_RATE_SHARE = 0.25;
+/** Maximum combined multiplier from temporary rate buffs on any one asset. */
+export const BUFF_CAP = 10;
 
 export interface Mods {
   /** Per-asset multiplier, aligned with ASSETS, including global multipliers and active buffs. */
@@ -28,6 +33,10 @@ export interface Mods {
   rates: number[];
   rate: number;
   clickPower: number;
+  /** Value of one automatic (intern) click. */
+  autoPower: number;
+  /** $/s with temporary buffs excluded. */
+  steadyRate: number;
 }
 
 const ORDER_BY_ID = Object.fromEntries(ORDERS.map(o => [o.id, o]));
@@ -55,6 +64,7 @@ function activeEffects(s: GameState): Effect[] {
   for (const id of s.research) out.push(...(RESEARCH_BY_ID[id]?.effects ?? []));
   for (const id of s.orders) out.push(...(ORDER_BY_ID[id]?.effects ?? []));
   for (const id of s.geo) out.push(...(GEO_BY_ID[id]?.effects ?? []));
+  for (let i = 0; i < s.finale; i++) out.push(...(FINALE[i]?.effects ?? []));
   return out;
 }
 
@@ -66,7 +76,7 @@ export function mods(s: GameState): Mods {
   const m: Mods = {
     asset: mult, global: 1, clickMult: 1, clickRatePct: 0, autoClick: 0, eventFreq: 1, eventDur: 1,
     costMult: 1, researchCost: 1, lobbyCost: 1, branchBonus: 1, auditImmune: false, startBudget: 0, startAssets: null,
-    rates: new Array<number>(n).fill(0), rate: 0, clickPower: 1,
+    rates: new Array<number>(n).fill(0), rate: 0, clickPower: 1, autoPower: 1, steadyRate: 0,
   };
   const totalOwned = ASSETS.reduce((t, a) => t + (s.owned[a.id] ?? 0), 0);
   const applyTo = (pred: (a: AssetDef) => boolean, k: number) => ASSETS.forEach((a, i) => { if (pred(a)) mult[i] *= k; });
@@ -115,22 +125,27 @@ export function mods(s: GameState): Mods {
   m.global *= 1 + ACHIEVEMENT_BONUS * s.achievements.length;
   m.global *= mandate(s.capitalEarned);
 
-  // Temporary buffs.
-  let buffRate = 1;
+  // Temporary buffs. Rate buffs stack multiplicatively but are capped per asset, so that
+  // overlapping frenzies, contracts and war games cannot compound into a runaway spike.
+  const buffMult = new Array<number>(n).fill(1);
   for (const b of s.buffs) {
     if (b.cost) m.costMult *= b.cost;
     if (b.click) m.clickMult *= b.click;
     if (!b.rate) continue;
-    if (b.domain || b.tags) applyTo(a => (!b.domain || a.domain === b.domain) && (!b.tags || a.tags.some(t => b.tags!.includes(t))), b.rate);
-    else buffRate *= b.rate;
+    ASSETS.forEach((a, i) => {
+      if ((!b.domain || a.domain === b.domain) && (!b.tags || a.tags.some(t => b.tags!.includes(t)))) buffMult[i] *= b.rate!;
+    });
   }
 
   ASSETS.forEach((a, i) => {
-    mult[i] *= m.global * buffRate;
+    mult[i] *= m.global;
+    m.steadyRate += a.baseRate * (s.owned[a.id] ?? 0) * mult[i];
+    mult[i] *= Math.min(BUFF_CAP, buffMult[i]);
     m.rates[i] = a.baseRate * (s.owned[a.id] ?? 0) * mult[i];
     m.rate += m.rates[i];
   });
   m.clickPower = m.clickMult + (m.rate * m.clickRatePct) / 100;
+  m.autoPower = m.clickMult + (m.rate * m.clickRatePct * INTERN_RATE_SHARE) / 100;
   cache = m;
   cacheKey = generation;
   return m;
@@ -176,6 +191,7 @@ export function buyAsset(s: GameState, a: AssetDef, count: number): boolean {
   s.budget -= cost;
   recordSpend(s, cost, a.branch);
   s.owned[a.id] = (s.owned[a.id] ?? 0) + count;
+  s.stats.bought += count;
   invalidate();
   return true;
 }
@@ -253,6 +269,7 @@ export function click(s: GameState): number {
 
 /** Advances the simulation by dt seconds. Returns true if buffs expired (UI may need a refresh). */
 export function tick(s: GameState, dt: number): boolean {
+  if (s.ended) return false;
   s.time += dt;
   s.runTime += dt;
   let expired = false;
@@ -262,7 +279,7 @@ export function tick(s: GameState, dt: number): boolean {
     invalidate();
   }
   const m = mods(s);
-  const auto = m.autoClick * dt * m.clickPower;
+  const auto = m.autoClick * dt * m.autoPower;
   if (auto) { s.clickSpent += auto; s.budget += auto; recordSpend(s, auto); }
   ASSETS.forEach((a, i) => {
     const amt = m.rates[i] * dt;
@@ -278,13 +295,20 @@ export function tick(s: GameState, dt: number): boolean {
 
 // ---------- Prestige ----------
 
-/** Global multiplier from political capital ever earned; square-root so prestige cannot run away. */
+/** Global multiplier from political capital ever earned. */
 export function mandate(capitalEarned: number): number {
   return 1 + MANDATE_PER_CAPITAL * Math.sqrt(capitalEarned);
 }
 
+/**
+ * Political capital for a lifetime total: the square of the spending magnitude (orders of magnitude
+ * past $100 million). Capital tracks progress through the tiers rather than the raw dollar figure,
+ * which spans more than thirty orders of magnitude, so a New Administration is a steady step up
+ * instead of a runaway.
+ */
 export function capitalFor(lifetime: number): number {
-  return Math.floor(Math.cbrt(lifetime / PRESTIGE_DIV));
+  if (lifetime < PRESTIGE_DIV) return 0;
+  return Math.floor((Math.log10(lifetime) - 8) ** 2);
 }
 
 export function pendingCapital(s: GameState): number {
@@ -293,7 +317,8 @@ export function pendingCapital(s: GameState): number {
 
 /** Lifetime spending needed for the next point of political capital. */
 export function nextCapitalAt(s: GameState): number {
-  return (capitalFor(s.lifetime) + 1) ** 3 * PRESTIGE_DIV;
+  const target = Math.max(capitalFor(s.lifetime), s.capitalEarned) + 1;
+  return Math.max(PRESTIGE_DIV, 10 ** (8 + Math.sqrt(target)));
 }
 
 export function prestige(s: GameState): number {
@@ -311,6 +336,8 @@ export function prestige(s: GameState): number {
   s.contractReadyAt = {};
   s.branchXp = { army: 0, navy: 0, af: 0, marines: 0, space: 0 };
   s.buffs = [];
+  s.finale = 0;
+  s.finaleReadyAt = 0;
   invalidate();
   const m = mods(s);
   s.budget = 15 + m.startBudget;
@@ -347,4 +374,42 @@ export function buyGeo(s: GameState, g: GeoOp): boolean {
   s.stats.geoOps++;
   invalidate();
   return true;
+}
+
+// ---------- Finale: Big Bang 2 ----------
+
+/** The finale opens once a Dyson Sphere is owned. */
+export function isFinaleUnlocked(s: GameState): boolean {
+  return (s.owned.dyson ?? 0) > 0;
+}
+
+/** Seconds until the current finale phase finishes construction (0 when the next can be funded). */
+export function finaleBuilding(s: GameState): number {
+  return Math.max(0, s.finaleReadyAt - s.time);
+}
+
+/** Price of a finale phase: a fixed number of seconds of steady spending, with a floor. */
+export function finaleCost(s: GameState, p: FinalePhase): number {
+  return Math.max(p.floor, p.seconds * mods(s).steadyRate);
+}
+
+/** Funds the next finale phase. Funding the last phase ends the game and records the playthrough. */
+export function buyFinale(s: GameState): FinalePhase | null {
+  const p = FINALE[s.finale];
+  if (!p || s.ended || !isFinaleUnlocked(s)) return null;
+  const cost = finaleCost(s, p);
+  if (cost > s.budget || finaleBuilding(s) > 0) return null;
+  s.budget -= cost;
+  recordSpend(s, cost, 'space');
+  s.finaleReadyAt = s.time + (BUILD[s.finale] ?? 0);
+  s.finale++;
+  if (s.finale >= FINALE.length) {
+    s.ended = {
+      time: s.time, at: Date.now(), lifetime: s.lifetime, clicks: s.clicks, prestiges: s.prestiges,
+      achievements: s.achievements.length, research: s.research.length, bestRate: s.stats.bestRate,
+    };
+    s.buffs = [];
+  }
+  invalidate();
+  return p;
 }

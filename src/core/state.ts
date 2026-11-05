@@ -38,6 +38,21 @@ export interface Stats {
   posts: number;
   potusClicks: number;
   geoOps: number;
+  /** Assets bought (cumulative across administrations). */
+  bought: number;
+}
+
+/** Snapshot taken when the final phase of Big Bang 2 is funded. The game cannot continue after it. */
+export interface EndRecord {
+  /** Total play time in seconds at the end. */
+  time: number;
+  at: number;
+  lifetime: number;
+  clicks: number;
+  prestiges: number;
+  achievements: number;
+  research: number;
+  bestRate: number;
 }
 
 export interface GameState {
@@ -75,12 +90,18 @@ export interface GameState {
   nextAuditAt: number;
   nextWargameAt: number;
   nextPostAt: number;
+  /** Phases of Big Bang 2 funded this administration (0-5). */
+  finale: number;
+  /** Game time at which the current finale phase finishes construction. */
+  finaleReadyAt: number;
+  /** Set when the game has been completed. */
+  ended: EndRecord | null;
 }
 
 export const SAVE_VERSION = 1;
 
 export function newStats(): Stats {
-  return { briefcases: 0, toilets: 0, audits: 0, auditsFailed: 0, contracts: 0, underBudget: 0, tickerClicks: 0, bestRate: 0, wargames: 0, muteToggles: 0, posts: 0, potusClicks: 0, geoOps: 0 };
+  return { briefcases: 0, toilets: 0, audits: 0, auditsFailed: 0, contracts: 0, underBudget: 0, tickerClicks: 0, bestRate: 0, wargames: 0, muteToggles: 0, posts: 0, potusClicks: 0, geoOps: 0, bought: 0 };
 }
 
 export function newSettings(): Settings {
@@ -118,5 +139,8 @@ export function newState(now = Date.now()): GameState {
     nextAuditAt: 420,
     nextWargameAt: 300,
     nextPostAt: 150,
+    finale: 0,
+    finaleReadyAt: 0,
+    ended: null,
   };
 }

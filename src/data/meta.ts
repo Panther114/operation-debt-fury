@@ -15,7 +15,7 @@ export const CONTRACTORS: ContractorDef[] = [
 
 export const LOBBY_GROWTH = 9;
 export const LOBBY_BONUS = 0.25;
-export const CONTRACT_COOLDOWN = 240;
+export const CONTRACT_COOLDOWN = 300;
 
 export interface BranchDef { id: BranchId; name: string; color: string; emblem: string }
 
@@ -75,22 +75,22 @@ export interface OrderDef { id: string; name: string; desc: string; cost: number
 export const ORDERS: OrderDef[] = [
   { id: 'eo_start', name: 'Continuing Resolution', desc: 'Start each administration with $50,000 already appropriated.', cost: 1, effects: [{ type: 'startBudget', amount: 5e4 }] },
   { id: 'eo_click', name: 'Executive Privilege', desc: 'Click power ×3.', cost: 2, effects: [{ type: 'clickMult', mult: 3 }] },
-  { id: 'eo_auto', name: 'Presidential Intern Program', desc: 'Interns click the pallet 3 times per second.', cost: 4, effects: [{ type: 'autoClick', perSec: 3 }] },
+  { id: 'eo_auto', name: 'Presidential Intern Program', desc: 'Interns click the pallet 3 times per second.', cost: 3, effects: [{ type: 'autoClick', perSec: 3 }] },
   { id: 'eo_gold1', name: 'Lobbyist Hotline', desc: 'Golden briefcases appear 25% more often.', cost: 5, effects: [{ type: 'eventFreq', mult: 1.25 }] },
   { id: 'eo_omnibus', name: 'Omnibus Spending Bill', desc: 'Start each administration with 10 of each of the first five assets.', cost: 8, effects: [{ type: 'startAssets', count: 10, tiers: 5 }] },
-  { id: 'eo_cost', name: 'Bulk Procurement Waiver', desc: 'All asset prices ×0.9.', cost: 10, effects: [{ type: 'costMult', mult: 0.9 }] },
-  { id: 'eo_gold2', name: 'K Street Express Lane', desc: 'Event effects last 30% longer.', cost: 12, effects: [{ type: 'eventDur', mult: 1.3 }] },
-  { id: 'eo_research', name: 'Black Budget Expansion', desc: 'Research costs ×0.5.', cost: 15, effects: [{ type: 'researchCost', mult: 0.5 }] },
-  { id: 'eo_lobby', name: 'Revolving Door Policy', desc: 'Lobbying costs ×0.5.', cost: 15, effects: [{ type: 'lobbyCost', mult: 0.5 }] },
-  { id: 'eo_emergency', name: 'National Emergency Declaration', desc: 'Everything ×1.5.', cost: 25, effects: [{ type: 'globalMult', mult: 1.5 }] },
-  { id: 'eo_branch', name: 'Joint Chiefs Fan Club', desc: 'Branch level bonuses ×2.', cost: 30, effects: [{ type: 'branchBonus', mult: 2 }] },
-  { id: 'eo_ig', name: 'Inspector General Sabbatical', desc: 'Congressional audits always end in your favour.', cost: 40, effects: [{ type: 'auditImmunity' }] },
-  { id: 'eo_useit', name: 'Use It or Lose It', desc: 'Everything ×2.', cost: 75, effects: [{ type: 'globalMult', mult: 2 }] },
-  { id: 'eo_blank', name: 'Blank Check', desc: 'Everything ×3.', cost: 250, effects: [{ type: 'globalMult', mult: 3 }] },
-  { id: 'eo_glitch', name: 'Infinite Money Glitch', desc: 'Everything ×5.', cost: 1000, effects: [{ type: 'globalMult', mult: 5 }] },
+  { id: 'eo_cost', name: 'Bulk Procurement Waiver', desc: 'All asset prices ×0.9.', cost: 12, effects: [{ type: 'costMult', mult: 0.9 }] },
+  { id: 'eo_gold2', name: 'K Street Express Lane', desc: 'Event effects last 30% longer.', cost: 18, effects: [{ type: 'eventDur', mult: 1.3 }] },
+  { id: 'eo_research', name: 'Black Budget Expansion', desc: 'Research costs ×0.5.', cost: 25, effects: [{ type: 'researchCost', mult: 0.5 }] },
+  { id: 'eo_lobby', name: 'Revolving Door Policy', desc: 'Lobbying costs ×0.5.', cost: 35, effects: [{ type: 'lobbyCost', mult: 0.5 }] },
+  { id: 'eo_emergency', name: 'National Emergency Declaration', desc: 'Everything ×1.5.', cost: 50, effects: [{ type: 'globalMult', mult: 1.5 }] },
+  { id: 'eo_branch', name: 'Joint Chiefs Fan Club', desc: 'Branch level bonuses ×2.', cost: 70, effects: [{ type: 'branchBonus', mult: 2 }] },
+  { id: 'eo_ig', name: 'Inspector General Sabbatical', desc: 'Congressional audits always end in your favour.', cost: 90, effects: [{ type: 'auditImmunity' }] },
+  { id: 'eo_useit', name: 'Use It or Lose It', desc: 'Everything ×2.', cost: 120, effects: [{ type: 'globalMult', mult: 2 }] },
+  { id: 'eo_blank', name: 'Blank Check', desc: 'Everything ×2.5.', cost: 180, effects: [{ type: 'globalMult', mult: 2.5 }] },
+  { id: 'eo_glitch', name: 'Infinite Money Glitch', desc: 'Everything ×3.', cost: 280, effects: [{ type: 'globalMult', mult: 3 }] },
 ];
 
 /** Mandate bonus: global multiplier is 1 + MANDATE_PER_CAPITAL × sqrt(capital ever earned). */
 export const MANDATE_PER_CAPITAL = 0.1;
-/** Lifetime spending divisor for the political capital curve: capital = cbrt(lifetime / PRESTIGE_DIV). */
+/** Lifetime spending at which political capital starts to accrue (see capitalFor). */
 export const PRESTIGE_DIV = 1e9;

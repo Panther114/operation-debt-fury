@@ -245,7 +245,7 @@ function showSettings(): void {
     h('div.form-row', {}, h('label', {}, 'Short numbers'), check(set.shortNumbers, v => { set.shortNumbers = v; })),
     h('div.form-row', {}, h('label', {}, 'Reduced motion'), check(set.reducedMotion, v => { set.reducedMotion = v; })),
     h('div.section-title', { style: 'margin-top:14px' }, 'Save Data'),
-    h('p.hint', {}, 'The game saves automatically every 30 seconds in this browser. Copy the code below to back up a save or move it to another browser.'),
+    h('p.hint', {}, 'The game saves automatically every few seconds in this browser. Copy the code below to back up a save or move it to another browser.'),
     area,
     h('div.row', { style: 'display:flex;gap:6px;margin-top:6px;flex-wrap:wrap' },
       h('button.btn.small', { onclick: () => { area.select(); void navigator.clipboard?.writeText(area.value); toast('Save Copied', 'The save code is on the clipboard.', 'receipt', 'good'); } }, 'Copy save code'),

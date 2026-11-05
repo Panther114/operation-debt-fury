@@ -6,7 +6,7 @@ export interface BusEvents {
   achievement: { id: string; name: string; desc: string };
   briefcase: { kind: 'briefcase' | 'toilet' };
   audit: void;
-  purchase: { asset?: AssetDef; kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' | 'geo'; id?: string };
+  purchase: { asset?: AssetDef; kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' | 'geo' | 'finale'; id?: string };
   buff: void;
   prestige: { gain: number };
   rank: { name: string };

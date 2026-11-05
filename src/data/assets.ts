@@ -112,7 +112,7 @@ const ROWS: Row[] = [
 ];
 
 /** Tuning parameters for the production curve (see scripts/balance-sim.ts). */
-export const CURVE = { cost0: 15, costGrowth: 5.4, costAccel: 1.025, rate0: 0.5, rateGrowth: 4.5 };
+export const CURVE = { cost0: 15, costGrowth: 6.7, costAccel: 1.008, rate0: 0.35, rateGrowth: 4.5 };
 
 function nice(n: number): number {
   if (n < 100) return Math.round(n);

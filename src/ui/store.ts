@@ -15,6 +15,7 @@ import { tip, ttRow, hideTip } from './overlay';
 import { audio } from '../audio/audio';
 import { DISTRICTS, GEO, GEO_BY_ID } from '../data/politics';
 import { drawWorld, geoAt } from './worldmap';
+import { BUILD, BUILD_STATUS, FINALE } from '../data/finale';
 
 export interface StoreCtx {
   s: () => GameState;
@@ -32,7 +33,7 @@ const fmtM = (n: number) => money(n, ctx.s().settings.shortNumbers);
 const DOMAIN_NAME = { air: 'Air', ground: 'Ground', sea: 'Sea', space: 'Space' };
 const BRANCH_NAME = Object.fromEntries(BRANCHES.map(b => [b.id, b.name]));
 
-function bought(kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' | 'geo', asset?: AssetDef, id?: string): void {
+function bought(kind: 'asset' | 'upgrade' | 'research' | 'lobby' | 'order' | 'contract' | 'geo' | 'finale', asset?: AssetDef, id?: string): void {
   emit('purchase', { kind, asset, id });
   built = '';
 }
@@ -69,7 +70,7 @@ function assetTip(a: AssetDef): Node {
 const assetsTab: Tab = {
   signature() {
     const s = ctx.s();
-    return 'assets:' + ASSETS.filter(a => E.isAssetVisible(s, a)).length + ':' + ASSETS.filter(a => E.isAssetUnlocked(s, a)).length;
+    return 'assets:' + ASSETS.filter(a => E.isAssetVisible(s, a)).length + ':' + ASSETS.filter(a => E.isAssetUnlocked(s, a)).length + ':' + s.finale + ':' + E.isFinaleUnlocked(s);
   },
   build() {
     const s = ctx.s();
@@ -96,6 +97,8 @@ const assetsTab: Tab = {
     }
     if (next) {
       frag.append(h('div.asset.locked.mystery', {}, h('span.ico', {}, spriteImg(next.id, 0, 64, 32)), h('span', {}, h('div.asset-name', {}, 'Classified Program'), h('div.asset-cost', {}, `Clearance at ${fmtM(next.baseCost * 0.5)} lifetime spending`)), h('span.asset-owned', {}, '?')));
+    } else {
+      frag.append(finaleCard(s));
     }
     return frag;
   },
@@ -118,8 +121,67 @@ const assetsTab: Tab = {
         img.replaceWith(next);
       }
     }
+    updateFinale(s);
   },
 };
+
+// ---------- Finale: Big Bang 2 ----------
+
+function finaleCard(s: GameState): HTMLElement {
+  if (!E.isFinaleUnlocked(s)) {
+    return h('div.card.finale-card.locked', {},
+      h('div.finale-kicker', {}, '★ FINAL LEVEL · CLASSIFIED ★'),
+      h('h4', {}, 'Big Bang 2: The Sequel'),
+      h('div.motto', {}, 'A programme so ambitious that it requires a Dyson Sphere just to power the overhead projector. Procure one Dyson Sphere to receive the briefing.'));
+  }
+  const p = FINALE[s.finale];
+  if (!p) {
+    return h('div.card.finale-card', {},
+      h('div.finale-kicker', {}, '★ FINAL LEVEL · COMPLETE ★'),
+      h('h4', {}, 'Big Bang 2: The Sequel'),
+      h('div.motto', {}, 'The universe has been spent in full. There is nothing left to buy, audit or regret.'));
+  }
+  const pips =h('div.finale-pips', {}, ...FINALE.map((_, i) => h('i', { class: i < s.finale ? 'done' : i === s.finale ? 'now' : '' })));
+  return h('div.card.finale-card', { id: 'finale-card' },
+    h('div.finale-kicker', {}, `★ FINAL LEVEL · BIG BANG 2: THE SEQUEL · PHASE ${s.finale + 1} OF ${FINALE.length} ★`),
+    pips,
+    h('h4', {}, p.name),
+    h('div.motto', {}, p.desc),
+    h('div.meta', {}, h('span.geo-fx', {}, p.effect), h('span.st', {}, '')),
+    h('div.finale-build', {}, h('div.fb-label', {}, ''), h('div.fb-bar', {}, h('i'))),
+    h('p.hint.finale-note', {}, `Priced at ${p.seconds} seconds of steady spending. Buying anything else raises the price: the physicists bill by the hour.`),
+    h('div.row', {}, h('button.btn.primary.finale-buy', { onclick: () => {
+      const st = ctx.s();
+      const done = E.buyFinale(st);
+      if (done) { hideTip(); bought('finale', undefined, done.id); } else audio.play('error');
+    } }, '')));
+}
+
+function updateFinale(s: GameState): void {
+  const card = document.getElementById('finale-card');
+  const p = FINALE[s.finale];
+  if (!card || !p) return;
+  const cost = E.finaleCost(s, p);
+  const b = card.querySelector<HTMLButtonElement>('.finale-buy')!;
+  const wait = E.finaleBuilding(s);
+  const build = card.querySelector<HTMLElement>('.finale-build')!;
+  toggle(build, 'show', wait > 0);
+  if (wait > 0) {
+    const total = BUILD[s.finale - 1] ?? 1;
+    const lines = BUILD_STATUS[s.finale - 1] ?? [''];
+    const line = lines[Math.floor((total - wait) / 6) % lines.length];
+    setText(build.querySelector('.fb-label')!, `Phase ${s.finale} under construction: ${line}… ${Math.ceil(wait)}s`);
+    build.querySelector<HTMLElement>('.fb-bar i')!.style.width = `${(1 - wait / total) * 100}%`;
+    b.disabled = true;
+    setText(b, `Under construction · next phase: ${fmtM(cost)}`);
+    setText(card.querySelector('.st')!, '');
+    return;
+  }
+  b.disabled = cost > s.budget;
+  setText(b, `${s.finale === FINALE.length - 1 ? 'PRESS THE BUTTON' : 'Fund phase'}: ${fmtM(cost)}`);
+  const rate = E.mods(s).rate;
+  setText(card.querySelector('.st')!, cost <= s.budget ? 'Affordable' : rate > 0 ? `≈ ${duration((cost - s.budget) / rate)} at current rate` : '');
+}
 
 // ---------- Upgrades ----------
 

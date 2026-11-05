@@ -17,6 +17,7 @@ export const RESEARCH_BRANCHES = [
   { id: 'au', name: 'Autonomy', color: '#6fd3f0' },
   { id: 'nu', name: 'Nuclear', color: '#9be564' },
   { id: 'sp', name: 'Space', color: '#8a5cc8' },
+  { id: 'pr', name: 'Spin', color: '#f5d33f' },
 ];
 
 type Node = [name: string, desc: string, effects: Effect[]];
@@ -71,6 +72,16 @@ const TREE: Record<string, { anchors: number[]; nodes: Node[] }> = {
     ['Space Force Song', 'Everything ×1.25. Nobody has heard it. That is not the point.', [{ type: 'globalMult', mult: 1.25 }]],
     ['Lunar Lift Contract', 'Unlocks the Lunar Marine Base.', [{ type: 'unlock' }]],
     ['Stellar Engineering', 'Unlocks the Dyson Sphere Defense Contract. Space assets ×3.', [{ type: 'unlock' }, { type: 'domainMult', domain: 'space', mult: 3 }]],
+  ] },
+  pr: { anchors: [3, 9, 14, 19, 24, 28, 32, 37], nodes: [
+    ['Mandatory Flag Pins', 'Click power ×2. Each pin is individually procured, and each is larger than the last.', [{ type: 'clickMult', mult: 2 }]],
+    ['Patriotic Merchandise Store', 'Everything ×1.15. The hats are made abroad; the tariffs on them are made here.', [{ type: 'globalMult', mult: 1.15 }]],
+    ['Rally Pyrotechnics Budget', 'Event effects last 20% longer. Every announcement now has fireworks, including the weather.', [{ type: 'eventDur', mult: 1.2 }]],
+    ['Press Release Autopilot', 'Branch level bonuses ×1.5. Victories are announced in advance to save time.', [{ type: 'branchBonus', mult: 1.5 }]],
+    ['Commemorative Coin Mint', 'Lobbying costs ×0.5. Every contractor receives a coin. The coins cost $40,000 each.', [{ type: 'lobbyCost', mult: 0.5 }]],
+    ['Marker-Corrected Forecasts', 'Everything ×1.3. Every chart is extended with a marker until it shows the correct answer.', [{ type: 'globalMult', mult: 1.3 }]],
+    ['Alternative Facts Engine', 'Asset prices ×0.85. The prices are unchanged; the facts about them are different.', [{ type: 'costMult', mult: 0.85 }]],
+    ['Fourth-Term Feasibility Study', 'Everything ×1.5. The study concludes that the study was a tremendous success.', [{ type: 'globalMult', mult: 1.5 }]],
   ] },
 };
 

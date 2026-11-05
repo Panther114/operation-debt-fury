@@ -26,6 +26,9 @@ export function migrate(raw: Partial<GameState>): GameState {
   s.stats = { ...newStats(), ...(raw.stats ?? {}) };
   s.settings = { ...newSettings(), ...(raw.settings ?? {}) };
   s.branchXp = { ...base.branchXp, ...(raw.branchXp ?? {}) };
+  if (typeof s.finale !== 'number' || !Number.isFinite(s.finale)) s.finale = 0;
+  if (!Number.isFinite(s.finaleReadyAt)) s.finaleReadyAt = 0;
+  if (!s.ended || typeof s.ended !== 'object' || !Number.isFinite(s.ended.time)) s.ended = null;
   for (const k of ['budget', 'spent', 'lifetime', 'capital', 'capitalEarned'] as const) {
     if (!Number.isFinite(s[k])) s[k] = base[k];
   }
@@ -78,4 +81,29 @@ export function wipeLocal(): void {
     localStorage.removeItem(SAVE_KEY);
     localStorage.removeItem(BACKUP_KEY);
   } catch { /* storage unavailable */ }
+}
+
+// ---------- Hall of Fame ----------
+
+/** Best completion records. Kept in their own key so that a restart or a wipe never erases them. */
+export const HOF_KEY = SAVE_KEY + '-hall-of-fame';
+
+export interface HofEntry { time: number; at: number; lifetime: number; clicks: number; prestiges: number; grade: string }
+
+export function loadHallOfFame(): HofEntry[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HOF_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter(e => e && Number.isFinite(e.time)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Adds a completion (once per completion timestamp) and returns the list sorted by time, best first. */
+export function recordHallOfFame(e: HofEntry): HofEntry[] {
+  const list = loadHallOfFame();
+  if (!list.some(x => x.at === e.at)) list.push(e);
+  list.sort((a, b) => a.time - b.time);
+  try { localStorage.setItem(HOF_KEY, JSON.stringify(list.slice(0, 50))); } catch { /* storage unavailable */ }
+  return list;
 }

@@ -23,7 +23,7 @@ export function addBuff(s: GameState, b: Omit<Buff, 'until' | 'duration'> & { du
 // ---------- Golden briefcases ----------
 
 export function scheduleBriefcase(s: GameState): void {
-  s.nextBriefcaseAt = s.time + rand(55, 140) / mods(s).eventFreq;
+  s.nextBriefcaseAt = s.time + rand(90, 180) / mods(s).eventFreq;
 }
 
 export function openBriefcase(s: GameState, kind: 'briefcase' | 'toilet'): void {
@@ -40,8 +40,8 @@ export function openBriefcase(s: GameState, kind: 'briefcase' | 'toilet'): void 
   emit('post', { text: pick(EVENT_POSTS.briefcase), pose: 'thumbs' });
   const r = Math.random();
   if (r < 0.42) {
-    addBuff(s, { id: 'supplemental', label: 'Emergency Supplemental', rate: 7, duration: 77, good: true });
-    emit('toast', { title: 'Emergency Supplemental', body: 'Congress passed it at 3 a.m. without reading it. All spending ×7 for 77 seconds.', icon: 'briefcase', tone: 'gold' });
+    addBuff(s, { id: 'supplemental', label: 'Emergency Supplemental', rate: 5, duration: 60, good: true });
+    emit('toast', { title: 'Emergency Supplemental', body: 'Congress passed it at 3 a.m. without reading it. All spending ×5 for 60 seconds.', icon: 'briefcase', tone: 'gold' });
   } else if (r < 0.72) {
     const amt = Math.min(s.budget * 0.15, m.rate * 900) + 13;
     s.budget += amt;
@@ -52,8 +52,8 @@ export function openBriefcase(s: GameState, kind: 'briefcase' | 'toilet'): void 
   } else {
     const domains = [...new Set(ASSETS.filter(a => s.owned[a.id]).map(a => a.domain))];
     const d = domains[Math.floor(Math.random() * domains.length)] ?? 'ground';
-    addBuff(s, { id: 'porkbarrel', label: `Pork Barrel: ${DOMAIN_LABEL[d]}`, rate: 15, domain: d, duration: 40, good: true });
-    emit('toast', { title: 'Pork Barrel Bonanza', body: `A key committee chair has a factory in their district. ${DOMAIN_LABEL[d]} spending ×15 for 40 seconds.`, icon: 'capitol', tone: 'gold' });
+    addBuff(s, { id: 'porkbarrel', label: `Pork Barrel: ${DOMAIN_LABEL[d]}`, rate: 10, domain: d, duration: 40, good: true });
+    emit('toast', { title: 'Pork Barrel Bonanza', body: `A key committee chair has a factory in their district. ${DOMAIN_LABEL[d]} spending ×10 for 40 seconds.`, icon: 'capitol', tone: 'gold' });
   }
 }
 
@@ -113,7 +113,7 @@ export function signContract(s: GameState, c: ContractorDef): void {
   s.stats.contracts++;
   s.contractReadyAt[c.id] = s.time + CONTRACT_COOLDOWN;
   const r = Math.random();
-  let mult = 3, dur = 60, body: string;
+  let mult = 2, dur = 60, body: string;
   if (r < 0.4) {
     const extra = s.budget * 0.1;
     s.budget -= extra;
@@ -123,12 +123,12 @@ export function signContract(s: GameState, c: ContractorDef): void {
     dur = 30;
     body = 'Schedule slip: deliveries cut short. Boost lasts 30 seconds.';
   } else if (r < 0.9) {
-    mult = 5;
-    body = 'Scope creep: the contract now includes everything. Boost raised to ×5.';
+    mult = 3;
+    body = 'Scope creep: the contract now includes everything. Boost raised to ×3.';
   } else {
-    mult = 7;
+    mult = 5;
     s.stats.underBudget++;
-    body = 'Delivered on time and under budget. Investigators have been notified. Boost raised to ×7.';
+    body = 'Delivered on time and under budget. Investigators have been notified. Boost raised to ×5.';
   }
   addBuff(s, { id: `contract_${c.id}`, label: c.name, rate: mult, tags: c.tags, duration: dur, good: true });
   emit('toast', { title: `Contract Signed: ${c.name}`, body, icon: 'capitol', tone: 'good' });
