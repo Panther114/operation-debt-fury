@@ -100,7 +100,11 @@ interface Variation {
   /** Replaces the last beat of the melody so the loop leads back into its first measure. */
   tail?: string;
   bass: 'octave' | 'drive' | 'held';
-  lead: { wave: Channel['wave']; vol: number; oct?: number; layer?: number };
+  lead: { wave: Channel['wave']; vol: number; oct?: number; layer?: number; gate?: number };
+  /** Intensity layer of a sawtooth brass voice in unison with the lead, which gives the tune a band timbre. */
+  brass?: number;
+  /** Volume of the off-beat chord stabs (default 0.045). */
+  stabVol?: number;
   /** Intensity layers for the optional parts; omitted parts are left out. */
   stabs?: number; arp?: number; double?: number; pad?: number; hats?: number;
   crashEvery?: number;
@@ -128,20 +132,25 @@ function variation(v: Variation): Track {
     if (v.hats !== undefined) ch.push({ wave: 'drum', every: 1, vol: 0.12, layer: v.hats, notes: measures.flatMap(() => r(d.hat)) });
     ch.push({ wave: 'drum', every: STEPS, vol: 0.26, layer: 0, notes: measures.map((_, i) => (i % (v.crashEvery ?? 16) === 0 ? 'C' : '.')) });
   }
-  if (v.stabs !== undefined) ch.push({ wave: 'pulse50', every: 4, vol: 0.045, layer: v.stabs, gate: 0.4, pan: -0.25, notes: chords.flatMap(c => ['.', c.pad, c.pad]) });
+  if (v.stabs !== undefined) ch.push({ wave: 'pulse50', every: 4, vol: v.stabVol ?? 0.045, layer: v.stabs, gate: 0.4, pan: -0.25, notes: chords.flatMap(c => ['.', c.pad, c.pad]) });
   if (v.pad !== undefined) ch.push({ wave: 'pulse12', every: STEPS, vol: 0.03, layer: v.pad, gate: 0.98, attack: 0.06, side: true, pan: -0.15, notes: chords.map(c => c.pad) });
   if (v.arp !== undefined) ch.push({ wave: 'pulse12', every: 1, vol: 0.024, layer: v.arp, gate: 0.4, echo: 0.45, pan: -0.4, notes: chords.flatMap(c => [...c.arp, ...c.arp, ...c.arp]) });
-  ch.push({ wave: v.lead.wave, every: 1, vol: v.lead.vol, layer: v.lead.layer ?? 0, gate: 0.75, vibrato: 1, detune: 7, pan: 0.1, echo: 0.15, notes: melody });
+  if (v.brass !== undefined) ch.push({ wave: 'sawtooth', every: 1, vol: 0.022, layer: v.brass, gate: v.lead.gate ?? 0.75, vibrato: 1, attack: 0.02, pan: -0.1, echo: 0.1, notes: melody });
+  ch.push({ wave: v.lead.wave, every: 1, vol: v.lead.vol, layer: v.lead.layer ?? 0, gate: v.lead.gate ?? 0.75, vibrato: 1, detune: 7, pan: 0.1, echo: 0.15, notes: melody });
   if (v.double !== undefined) ch.push({ wave: 'pulse12', every: 1, vol: 0.035, layer: v.double, gate: 0.75, echo: 0.5, pan: 0.3, notes: melody.map(n => shift(n, 1)) });
   return { id: v.id, name: v.name, bpm: v.bpm, bars: (measures.length * STEPS) / 16, channels: ch };
 }
 
 // ---------- Game tracks ----------
 
-/** The main game: the whole anthem as a brass-band march; parts join as spending rises. */
+/**
+ * The main game: the whole anthem as a brass-band march; parts join as spending rises. The tune is
+ * kept in front of the band: a slightly broader tempo, a legato lead doubled by a brass voice from
+ * the first bar, and quieter accompaniment stabs.
+ */
 const march = variation({
-  id: 'march', name: 'Appropriations March', bpm: 120, from: 1, to: 32, drums: 'march', bass: 'octave',
-  lead: { wave: 'pulse50', vol: 0.095 }, stabs: 0, double: 2, arp: 2, hats: 3, pad: 3,
+  id: 'march', name: 'Appropriations March', bpm: 108, from: 1, to: 32, drums: 'march', bass: 'octave',
+  lead: { wave: 'pulse50', vol: 0.115, gate: 0.9 }, brass: 0, stabs: 0, stabVol: 0.03, double: 1, arp: 2, hats: 3, pad: 3,
 });
 /** Audits and bad news: the first half of the anthem mutated into C minor, slow and ticking. */
 const warroom = variation({

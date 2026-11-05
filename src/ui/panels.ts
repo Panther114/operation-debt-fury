@@ -109,7 +109,7 @@ export function updatePanels(): void {
   // Debt clock and the taxpayer.
   const perTax = s.lifetime / TAXPAYERS;
   const debt = BASE_DEBT + s.time * DEBT_DRIFT + s.lifetime;
-  setText($('#debt'), debt < 1e15 ? '$' + Math.floor(debt).toLocaleString('en-US') : money(debt));
+  setDebt(debt);
   setText($('#per-taxpayer'), money(perTax));
   const mood = taxpayerMood(perTax);
   const art = $('#taxpayer-art');
@@ -270,3 +270,29 @@ function importSave(): void {
 
 /** Selected jukebox track ('auto' lets the game choose). */
 export let jukebox = 'auto';
+
+// ---------- Debt clock ----------
+
+/** Full-digit dollar figure; the debt clock never abbreviates to named tiers. */
+export function fullMoney(n: number): string {
+  if (!Number.isFinite(n)) return n > 0 ? '$∞' : '-$∞';
+  return (n < 0 ? '-$' : '$') + Math.floor(Math.abs(n)).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+let debtLen = -1;
+/** Writes the debt figure in full, widening its cell first and shrinking the font only once no room is left. */
+function setDebt(debt: number): void {
+  const el = $('#debt');
+  const text = fullMoney(debt);
+  setText(el, text);
+  if (text.length !== debtLen) { debtLen = text.length; fitDebt(); }
+}
+
+function fitDebt(): void {
+  const el = $('#debt');
+  el.style.fontSize = '';
+  if (el.scrollWidth <= el.clientWidth || !el.clientWidth) return;
+  const base = parseFloat(getComputedStyle(el).fontSize);
+  el.style.fontSize = `${Math.max(2, Math.floor(base * (el.clientWidth / el.scrollWidth) * 10) / 10)}px`;
+}
+window.addEventListener('resize', fitDebt);

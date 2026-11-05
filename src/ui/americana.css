@@ -43,11 +43,11 @@ body {
 .icon-btn:hover { background: var(--flag-red); border-color: #ff8a8a; }
 
 /* ---------- National debt clock ---------- */
-#debtbar { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); margin: 0 8px; background: #050a1c; border: 2px solid #000; border-top: none; box-shadow: inset 0 0 0 1px #3a1420; }
+#debtbar { display: grid; grid-template-columns: minmax(0, max-content) auto auto minmax(0, 1fr); margin: 0 8px; background: #050a1c; border: 2px solid #000; border-top: none; box-shadow: inset 0 0 0 1px #3a1420; }
 .debt-cell { display: flex; flex-direction: column; justify-content: center; padding: 4px 14px; border-right: 1px solid #2a1620; min-width: 0; }
 .debt-label { font-family: var(--pixel); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #ff8a8a; white-space: nowrap; }
 .debt-cell b { font-family: var(--digits); font-size: 11px; font-weight: 400; color: #ffd76a; white-space: nowrap; text-shadow: 0 0 8px rgba(255, 70, 70, 0.6); }
-.debt-main b { font-size: 14px; color: #ff4655; text-shadow: 0 0 10px rgba(255, 70, 85, 0.85); animation: debtGlow 1.4s ease-in-out infinite alternate; }
+.debt-main b { display: block; overflow: hidden; font-size: 14px; color: #ff4655; text-shadow: 0 0 10px rgba(255, 70, 85, 0.85); animation: debtGlow 1.4s ease-in-out infinite alternate; }
 @keyframes debtGlow { to { text-shadow: 0 0 18px rgba(255, 70, 85, 1), 0 0 2px #fff; } }
 .debt-opp { border-right: none; overflow: hidden; }
 .debt-opp b { color: #b8e0a0; font-family: var(--pixel); font-size: 12px; overflow: hidden; text-overflow: ellipsis; text-shadow: none; }
@@ -186,7 +186,7 @@ body {
   .debt-cell:nth-child(3) { display: none; }
   .debt-opp { grid-column: 1 / -1; border-top: 1px solid #2a1620; }
   .debt-main { grid-column: 1 / -1; }
-  .debt-main b { font-size: 11px; }
+  .debt-main b { font-size: 11px; text-overflow: clip; }
   .debt-cell b { overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
   .brand { min-width: 0; overflow: hidden; }
   .brand > div { min-width: 0; }
